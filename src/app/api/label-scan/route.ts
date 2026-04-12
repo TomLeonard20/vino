@@ -12,6 +12,12 @@ export interface LabelScanResult {
   criticScore: null
 }
 
+/** Strip markdown code fences that Claude sometimes adds despite instructions */
+function extractJson(raw: string): string {
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/)
+  return fenced ? fenced[1].trim() : raw.trim()
+}
+
 export async function POST(request: Request) {
   const { image } = await request.json() as { image: string }
 
@@ -22,12 +28,13 @@ export async function POST(request: Request) {
   // Strip the data URL prefix to get raw base64
   const base64Data = image.replace(/^data:image\/\w+;base64,/, '')
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    // Return a stub so the UI still works without the key
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey || apiKey.startsWith('sk-ant-REPLACE')) {
+    // Return a stub so the UI still works without the key configured
     return NextResponse.json({
       found: true,
       wine: {
-        name: 'Wine (label scan unavailable)',
+        name: 'Wine (AI label scan — add API key to enable)',
         producer: '',
         region: '',
         vintage: null,
@@ -39,11 +46,11 @@ export async function POST(request: Request) {
     })
   }
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const client = new Anthropic({ apiKey })
 
   try {
     const message = await client.messages.create({
-      model: 'claude-opus-4-5',
+      model: 'claude-sonnet-4-20250514',
       max_tokens: 512,
       messages: [
         {
@@ -60,37 +67,56 @@ export async function POST(request: Request) {
             {
               type: 'text',
               text: `Look at this wine label image and extract the wine details.
-Return ONLY a JSON object with these fields (no markdown, no explanation):
+Return ONLY a raw JSON object — no markdown, no code fences, no explanation:
 {
   "name": "full wine name",
   "producer": "winery or producer name",
   "region": "appellation or region",
   "vintage": 2019,
   "grapes": ["Cabernet Sauvignon"],
-  "wineType": "Red"
+  "wineType": "Red",
+  "unreadable": false
 }
 
 Rules:
-- vintage must be a number (4-digit year) or null if not shown
-- wineType must be one of: Red, White, Rosé, Champagne, Sparkling, Dessert
-- grapes must be an array of strings (empty array if not shown)
-- If you cannot read the label at all, return { "error": "unreadable" }`,
+- vintage must be a number (4-digit year) or null if not visible
+- wineType must be exactly one of: Red, White, Rosé, Champagne, Sparkling, Dessert
+- grapes must be an array of strings (empty array [] if not shown on label)
+- If this is not a wine label or you genuinely cannot read it, set "unreadable": true and leave other fields as empty strings/null
+- Do NOT wrap in markdown or code blocks — raw JSON only`,
             },
           ],
         },
       ],
     })
 
-    const raw = (message.content[0] as { type: string; text: string }).text.trim()
+    const rawText = (message.content[0] as { type: string; text: string }).text
+    const cleaned = extractJson(rawText)
 
-    if (raw.includes('"error"')) {
+    let parsed: LabelScanResult & { unreadable?: boolean }
+    try {
+      parsed = JSON.parse(cleaned)
+    } catch {
+      console.error('JSON parse failed. Raw response:', rawText)
+      return NextResponse.json({ found: false, error: 'Could not parse label response' })
+    }
+
+    if (parsed.unreadable) {
       return NextResponse.json({ found: false, error: 'Could not read label' })
     }
 
-    const parsed = JSON.parse(raw) as LabelScanResult
     return NextResponse.json({
       found: true,
-      wine: { ...parsed, source: 'label_scan' as const, criticScore: null },
+      wine: {
+        name:        parsed.name     || 'Unknown wine',
+        producer:    parsed.producer || '',
+        region:      parsed.region   || '',
+        vintage:     parsed.vintage  ?? null,
+        grapes:      Array.isArray(parsed.grapes) ? parsed.grapes : [],
+        wineType:    parsed.wineType || 'Red',
+        source:      'label_scan' as const,
+        criticScore: null,
+      } satisfies LabelScanResult,
     })
   } catch (err) {
     console.error('Label scan error:', err)

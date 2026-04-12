@@ -61,6 +61,8 @@ export default function ScanPage() {
     const data = await res.json()
 
     if (!data.found) {
+      // Barcode not in Open Food Facts — switch to label scan so user can
+      // photo the label and let Claude read it
       setState('not_found')
       return
     }
@@ -219,11 +221,19 @@ export default function ScanPage() {
             <div className="w-full space-y-2">
               <p className="text-white text-sm text-center px-4 py-2 rounded-full"
                  style={{ background: 'rgba(0,0,0,0.6)' }}>
-                {mode === 'label' ? 'Couldn\'t read the label' : 'Wine not found in database'}
+                {mode === 'label' ? "Couldn't read the label — try again" : "Barcode not in database"}
               </p>
+              {mode === 'barcode' && (
+                <button
+                  onClick={() => { setMode('label'); rescan() }}
+                  className="w-full py-3 rounded-xl text-white font-semibold text-sm"
+                  style={{ background: '#8b2035' }}>
+                  📷 Scan the label instead
+                </button>
+              )}
               <button onClick={() => setState('manual')}
                       className="w-full py-3 rounded-xl text-white font-semibold text-sm"
-                      style={{ background: '#8b2035' }}>
+                      style={{ background: mode === 'label' ? '#8b2035' : 'rgba(255,255,255,0.15)' }}>
                 Enter wine manually
               </button>
               <button onClick={rescan}
