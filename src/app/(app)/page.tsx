@@ -12,6 +12,16 @@ function greeting() {
   return 'Good evening'
 }
 
+/** Pull first name from either display_name metadata or the email prefix */
+function firstName(user: { email?: string; user_metadata?: Record<string, string> } | null): string {
+  if (!user) return 'there'
+  const full = user.user_metadata?.full_name ?? user.user_metadata?.name ?? ''
+  if (full) return full.split(' ')[0]
+  // Fall back to email prefix, but capitalise and strip numbers
+  const prefix = user.email?.split('@')[0] ?? ''
+  return prefix.replace(/\d+/g, '').replace(/^./, c => c.toUpperCase()) || 'there'
+}
+
 export default async function HomePage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -21,36 +31,36 @@ export default async function HomePage() {
     supabase.from('tasting_notes').select('*, wine:wines(*)').order('tasted_at', { ascending: false }).limit(2),
   ])
 
-  const allBottles = (bottles ?? []) as CellarBottle[]
-  const recentNotes = (notes ?? []) as TastingNote[]
+  const allBottles  = (bottles ?? []) as CellarBottle[]
+  const recentNotes = (notes   ?? []) as TastingNote[]
 
   const totalBottles = allBottles.reduce((s, b) => s + b.quantity, 0)
-  const drinkSoon = allBottles.filter(b => {
+  const drinkSoon    = allBottles.filter(b => {
     const s = drinkingStatus(b)
     return s === 'Drink now' || s === 'At peak' || s === 'Open soon'
   }).length
 
-  const firstName = user?.email?.split('@')[0] ?? 'there'
+  const name = firstName(user as Parameters<typeof firstName>[0])
 
   return (
     <div className="space-y-5 pb-4">
-      {/* Greeting */}
+
+      {/* ── Greeting ── */}
       <h2 className="text-xl font-semibold" style={{ color: '#3a1a20' }}>
-        {greeting()}, {firstName}
+        {greeting()}, {name}
       </h2>
 
-      {/* Stats row */}
+      {/* ── Stats row ── */}
       <div className="grid grid-cols-3 gap-px rounded-xl overflow-hidden border"
            style={{ borderColor: '#d4b8aa' }}>
         {[
-          { label: 'Bottles', value: totalBottles },
+          { label: 'Bottles',       value: totalBottles },
           { label: 'Tasting notes', value: recentNotes.length },
-          { label: 'Drink soon', value: drinkSoon, highlight: drinkSoon > 0 },
+          { label: 'Drink soon',    value: drinkSoon, highlight: drinkSoon > 0 },
         ].map(s => (
-          <div key={s.label} className="text-center py-4 px-2"
-               style={{ background: '#ecddd4' }}>
+          <div key={s.label} className="text-center py-4 px-2" style={{ background: '#ecddd4' }}>
             <div className="text-2xl font-bold"
-                 style={{ color: s.highlight ? '#8b2035' : '#3a1a20' }}>
+                 style={{ color: 'highlight' in s && s.highlight ? '#8b2035' : '#3a1a20' }}>
               {s.value}
             </div>
             <div className="text-xs mt-0.5" style={{ color: '#a07060' }}>{s.label}</div>
@@ -58,28 +68,57 @@ export default async function HomePage() {
         ))}
       </div>
 
-      {/* Pair my meal card */}
-      <div className="rounded-xl p-4 space-y-3" style={{ background: '#ecddd4' }}>
-        <h3 className="font-semibold" style={{ color: '#3a1a20' }}>Pair my meal</h3>
-        <form action="/pairing" method="get" className="flex gap-2">
+      {/* ── 1. Pair my meal ── */}
+      <div className="rounded-xl p-4 space-y-2" style={{ background: '#ecddd4' }}>
+        <div className="flex items-center gap-2">
+          <span className="text-base">🍽️</span>
+          <h3 className="font-semibold text-sm" style={{ color: '#3a1a20' }}>Pair my meal</h3>
+        </div>
+        <p className="text-xs" style={{ color: '#a07060' }}>
+          Tell us what you&apos;re eating and we&apos;ll rank your cellar + suggest styles.
+        </p>
+        <form action="/pairing" method="get" className="flex gap-2 pt-1">
           <input
             name="meal"
             type="text"
-            placeholder="What are you eating tonight?"
+            placeholder="e.g. Roast lamb with rosemary"
             className="flex-1 px-3 py-2 rounded-lg text-sm border"
             style={{ background: '#f5ede6', borderColor: '#d4b8aa', color: '#3a1a20' }}
           />
-          <button
-            type="submit"
-            className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
-            style={{ background: '#8b2035' }}
-          >
+          <button type="submit"
+                  className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                  style={{ background: '#8b2035' }}>
             Match
           </button>
         </form>
       </div>
 
-      {/* Scan CTA */}
+      {/* ── 2. Find a wine ── */}
+      <div className="rounded-xl p-4 space-y-2" style={{ background: '#ecddd4' }}>
+        <div className="flex items-center gap-2">
+          <span className="text-base">🔍</span>
+          <h3 className="font-semibold text-sm" style={{ color: '#3a1a20' }}>Find a wine</h3>
+        </div>
+        <p className="text-xs" style={{ color: '#a07060' }}>
+          Describe what you&apos;re after and we&apos;ll recommend the best grapes and styles.
+        </p>
+        <form action="/find" method="get" className="flex gap-2 pt-1">
+          <input
+            name="q"
+            type="text"
+            placeholder="e.g. something bold and oaky for a cold night"
+            className="flex-1 px-3 py-2 rounded-lg text-sm border"
+            style={{ background: '#f5ede6', borderColor: '#d4b8aa', color: '#3a1a20' }}
+          />
+          <button type="submit"
+                  className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                  style={{ background: '#8b2035' }}>
+            Find
+          </button>
+        </form>
+      </div>
+
+      {/* ── 3. Add a bottle ── */}
       <a
         href="/scan"
         className="flex items-center justify-center gap-2 rounded-xl py-4 text-white font-semibold"
@@ -96,7 +135,7 @@ export default async function HomePage() {
         Add a bottle
       </a>
 
-      {/* Recent notes */}
+      {/* ── Recent notes ── */}
       <div className="space-y-3">
         <h3 className="font-semibold" style={{ color: '#3a1a20' }}>Recent notes</h3>
         {recentNotes.length === 0 ? (

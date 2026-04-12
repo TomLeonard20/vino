@@ -57,13 +57,12 @@ export default async function WineDetailPage({
             <ScoreBadge score={wine.critic_score ?? null} />
           </div>
 
-          {/* Tags */}
+          {/* Tags: wine type · vintage · grapes · country */}
           <div className="flex flex-wrap gap-1.5">
             {[
               b.wine_type,
               wine.vintage?.toString(),
-              wine.region,
-              wine.grapes?.[0],
+              ...(wine.grapes ?? []),
             ].filter(Boolean).map(tag => (
               <span key={tag}
                     className="text-xs px-2.5 py-1 rounded-full font-medium"
@@ -72,6 +71,13 @@ export default async function WineDetailPage({
               </span>
             ))}
           </div>
+
+          {/* Region / country row */}
+          {wine.region && (
+            <p className="text-xs" style={{ color: '#a07060' }}>
+              📍 {wine.region}
+            </p>
+          )}
 
           {/* Quantity + status row */}
           <div className="flex items-center justify-between">
