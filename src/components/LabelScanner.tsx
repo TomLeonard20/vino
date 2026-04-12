@@ -7,49 +7,63 @@ interface Props {
   active: boolean
 }
 
+type CameraState = 'starting' | 'ready' | 'error'
+
 export default function LabelScanner({ onCapture, active }: Props) {
-  const videoRef = useRef<HTMLVideoElement>(null)
+  const videoRef  = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
-  const [torchOn, setTorchOn] = useState(false)
-  const [ready, setReady] = useState(false)
+  const [camState, setCamState] = useState<CameraState>('starting')
+  const [torchOn,  setTorchOn]  = useState(false)
 
   useEffect(() => {
     if (!active) return
-    setReady(false)
+    setCamState('starting')
 
     navigator.mediaDevices
       .getUserMedia({ video: { facingMode: 'environment' } })
       .then(stream => {
         streamRef.current = stream
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-          videoRef.current.play()
-          videoRef.current.onloadedmetadata = () => setReady(true)
-        }
+        const video = videoRef.current
+        if (!video) return
+        video.srcObject = stream
+        // Use oncanplay — fires reliably on iOS/Android/desktop once video data is available
+        video.oncanplay = () => setCamState('ready')
+        // Also handle cases where oncanplay already fired
+        video.play().then(() => {
+          if (video.readyState >= 3) setCamState('ready')
+        }).catch(() => setCamState('error'))
       })
-      .catch(err => console.error('Camera error:', err))
+      .catch(err => {
+        console.error('Camera error:', err)
+        setCamState('error')
+      })
 
     return () => {
       streamRef.current?.getTracks().forEach(t => t.stop())
-      setReady(false)
+      setCamState('starting')
     }
   }, [active])
 
   function capture() {
     const video = videoRef.current
-    if (!video || video.readyState < 2) return
+    if (!video) return
 
-    // Resize to max 1024px wide to keep payload reasonable
-    const MAX = 1024
+    // Take frame even if readyState is just 2 (enough data to render)
+    if (video.readyState < 2) {
+      console.warn('Video not ready, readyState:', video.readyState)
+      return
+    }
+
+    const MAX   = 1280
     const scale = video.videoWidth > MAX ? MAX / video.videoWidth : 1
-    const w = Math.round(video.videoWidth * scale)
-    const h = Math.round(video.videoHeight * scale)
+    const w     = Math.round((video.videoWidth  || 1280) * scale)
+    const h     = Math.round((video.videoHeight || 720)  * scale)
 
     const canvas = document.createElement('canvas')
-    canvas.width = w
+    canvas.width  = w
     canvas.height = h
     canvas.getContext('2d')!.drawImage(video, 0, 0, w, h)
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.90)
     onCapture(dataUrl)
   }
 
@@ -70,66 +84,98 @@ export default function LabelScanner({ onCapture, active }: Props) {
         className="absolute inset-0 w-full h-full object-cover"
         muted
         playsInline
+        autoPlay
       />
 
-      {/* Subtle label framing guide */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div
-          className="border border-white/30 rounded-lg"
-          style={{ width: '70vw', maxWidth: 300, height: '50vw', maxHeight: 220 }}
-        >
-          {/* Corner accents */}
-          {(['tl','tr','bl','br'] as const).map(pos => (
-            <span
-              key={pos}
-              className="absolute w-5 h-5 border-white"
-              style={{
-                top:    pos.startsWith('t') ? -1 : undefined,
-                bottom: pos.startsWith('b') ? -1 : undefined,
-                left:   pos.endsWith('l')   ? -1 : undefined,
-                right:  pos.endsWith('r')   ? -1 : undefined,
-                borderTopWidth:    pos.startsWith('t') ? 2 : 0,
-                borderBottomWidth: pos.startsWith('b') ? 2 : 0,
-                borderLeftWidth:   pos.endsWith('l')   ? 2 : 0,
-                borderRightWidth:  pos.endsWith('r')   ? 2 : 0,
-              }}
-            />
-          ))}
+      {/* Camera starting overlay */}
+      {camState === 'starting' && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3">
+          <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          <p className="text-white/60 text-sm">Starting camera…</p>
         </div>
-      </div>
+      )}
+
+      {/* Camera error overlay */}
+      {camState === 'error' && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center px-6">
+          <div className="rounded-xl p-4 text-center space-y-2"
+               style={{ background: 'rgba(139,32,53,0.9)' }}>
+            <p className="text-white font-semibold text-sm">Camera unavailable</p>
+            <p className="text-white/70 text-xs">
+              Allow camera access in your browser settings, then reload the page.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Label framing guide (only when camera is ready) */}
+      {camState === 'ready' && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div
+            className="relative rounded-lg"
+            style={{ width: '70vw', maxWidth: 300, height: '50vw', maxHeight: 220 }}
+          >
+            {/* Corner accents */}
+            {(['tl','tr','bl','br'] as const).map(pos => (
+              <span
+                key={pos}
+                className="absolute w-5 h-5 border-white"
+                style={{
+                  top:    pos.startsWith('t') ? -1 : undefined,
+                  bottom: pos.startsWith('b') ? -1 : undefined,
+                  left:   pos.endsWith('l')   ? -1 : undefined,
+                  right:  pos.endsWith('r')   ? -1 : undefined,
+                  borderTopWidth:    pos.startsWith('t') ? 2 : 0,
+                  borderBottomWidth: pos.startsWith('b') ? 2 : 0,
+                  borderLeftWidth:   pos.endsWith('l')   ? 2 : 0,
+                  borderRightWidth:  pos.endsWith('r')   ? 2 : 0,
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Torch button */}
-      <button
-        onClick={toggleTorch}
-        className="absolute top-4 right-4 z-20 w-10 h-10 rounded-full flex items-center justify-center"
-        style={{ background: 'rgba(0,0,0,0.5)' }}
-        aria-label="Toggle torch"
-      >
-        {torchOn ? '🔦' : '💡'}
-      </button>
+      {camState === 'ready' && (
+        <button
+          onClick={toggleTorch}
+          className="absolute top-4 right-4 z-20 w-10 h-10 rounded-full flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.5)' }}
+          aria-label="Toggle torch"
+        >
+          {torchOn ? '🔦' : '💡'}
+        </button>
+      )}
 
       {/* Capture button */}
       <button
         onClick={capture}
-        disabled={!ready}
-        className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 rounded-full transition-transform active:scale-95"
-        style={{
-          width: 72,
-          height: 72,
-          background: ready ? 'white' : 'rgba(255,255,255,0.3)',
-          boxShadow: ready ? '0 0 0 4px rgba(255,255,255,0.3)' : 'none',
-        }}
+        disabled={camState !== 'ready'}
+        className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 rounded-full transition-all active:scale-90"
         aria-label="Capture label"
+        style={{
+          width:      72,
+          height:     72,
+          background: camState === 'ready' ? 'white' : 'rgba(255,255,255,0.2)',
+          boxShadow:  camState === 'ready' ? '0 0 0 5px rgba(255,255,255,0.25)' : 'none',
+          cursor:     camState === 'ready' ? 'pointer' : 'default',
+        }}
       >
-        <span className="sr-only">Capture</span>
+        {camState === 'starting' && (
+          <div className="w-5 h-5 border-2 border-white/40 border-t-white/80 rounded-full animate-spin mx-auto" />
+        )}
       </button>
 
-      {/* Hint */}
+      {/* Hint text */}
       <p
-        className="absolute bottom-24 left-1/2 -translate-x-1/2 text-xs text-white/60 whitespace-nowrap"
-        style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}
+        className="absolute bottom-[6.5rem] left-1/2 -translate-x-1/2 text-xs whitespace-nowrap"
+        style={{
+          color:      camState === 'ready' ? 'rgba(255,255,255,0.6)' : 'transparent',
+          textShadow: '0 1px 3px rgba(0,0,0,0.8)',
+        }}
       >
-        Frame the label, then tap the button
+        Frame the front label, then tap the button
       </p>
     </div>
   )

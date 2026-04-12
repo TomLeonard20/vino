@@ -12,7 +12,7 @@ const LabelScanner  = dynamic(() => import('@/components/LabelScanner'),  { ssr:
 const BarcodeScanner = dynamic(() => import('@/components/BarcodeScanner'), { ssr: false })
 
 type ScanMode  = 'label' | 'barcode'
-type ScanState = 'scanning' | 'processing' | 'estimating' | 'found' | 'not_found' | 'no_barcode' | 'manual'
+type ScanState = 'scanning' | 'processing' | 'estimating' | 'found' | 'not_found' | 'no_barcode' | 'no_api_key' | 'manual'
 
 interface ScannedWine {
   name: string
@@ -46,7 +46,7 @@ export default function ScanPage() {
     const data = await res.json()
 
     if (!data.found) {
-      setState('not_found')
+      setState(data.noApiKey ? 'no_api_key' : 'not_found')
       return
     }
 
@@ -241,6 +241,30 @@ export default function ScanPage() {
                       style={{ color: 'rgba(255,255,255,0.6)' }}>
                 Try again
               </button>
+            </div>
+          )}
+
+          {/* No API key configured */}
+          {state === 'no_api_key' && (
+            <div className="w-full rounded-2xl overflow-hidden" style={{ background: '#3a1a20' }}>
+              <div className="p-4 space-y-3">
+                <p className="font-semibold text-white text-sm">AI label scan not configured</p>
+                <p className="text-xs leading-relaxed" style={{ color: '#c4a090' }}>
+                  Label scanning uses Claude AI to read your bottle. To enable it, add your{' '}
+                  <span className="text-white font-medium">ANTHROPIC_API_KEY</span>{' '}
+                  to Vercel → Project Settings → Environment Variables, then redeploy.
+                </p>
+                <button onClick={() => setState('manual')}
+                        className="w-full py-3 rounded-xl text-white font-semibold text-sm"
+                        style={{ background: '#8b2035' }}>
+                  Enter wine manually instead
+                </button>
+                <button onClick={rescan}
+                        className="w-full py-2 text-xs"
+                        style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  Back
+                </button>
+              </div>
             </div>
           )}
 

@@ -30,20 +30,8 @@ export async function POST(request: Request) {
 
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey || apiKey.startsWith('sk-ant-REPLACE')) {
-    // Return a stub so the UI still works without the key configured
-    return NextResponse.json({
-      found: true,
-      wine: {
-        name: 'Wine (AI label scan — add API key to enable)',
-        producer: '',
-        region: '',
-        vintage: null,
-        grapes: [],
-        wineType: 'Red',
-        source: 'label_scan',
-        criticScore: null,
-      } satisfies LabelScanResult,
-    })
+    // Tell the UI clearly that the key isn't configured, rather than returning a fake result
+    return NextResponse.json({ found: false, noApiKey: true })
   }
 
   const client = new Anthropic({ apiKey })
