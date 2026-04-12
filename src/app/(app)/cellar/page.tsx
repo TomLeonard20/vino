@@ -4,6 +4,7 @@ import type { CellarBottle, WineType } from '@/types/database'
 import ScoreBadge from '@/components/ui/ScoreBadge'
 import WindowStatusPill from '@/components/ui/WindowStatusPill'
 import WineTypeBar from '@/components/ui/WineTypeBar'
+import Link from 'next/link'
 
 const WINE_TYPES: WineType[] = ['Red', 'White', 'Rosé', 'Champagne']
 
@@ -116,13 +117,14 @@ export default async function CellarPage({
         ))
       )}
 
-      {/* Add bottle placeholder */}
-      <button
-        className="w-full py-3 rounded-xl text-sm font-semibold border"
+      {/* Add bottle */}
+      <Link
+        href="/scan"
+        className="block w-full py-3 rounded-xl text-sm font-semibold text-center border"
         style={{ borderColor: '#8b2035', color: '#8b2035', background: 'transparent' }}
       >
-        + Add bottle — coming soon
-      </button>
+        + Add a bottle
+      </Link>
     </div>
   )
 }
@@ -132,7 +134,8 @@ function BottleRow({ bottle }: { bottle: CellarBottle }) {
   const wine = bottle.wine
 
   return (
-    <div className="rounded-xl overflow-hidden flex" style={{ background: '#ecddd4' }}>
+    <Link href={`/cellar/${bottle.id}`} className="rounded-xl overflow-hidden flex active:opacity-70 transition-opacity"
+          style={{ background: '#ecddd4' }}>
       <WineTypeBar type={bottle.wine_type} />
       <div className="flex-1 px-3 py-3 flex items-start gap-3">
         <ScoreBadge score={wine?.critic_score ?? null} size="sm" />
@@ -152,8 +155,9 @@ function BottleRow({ bottle }: { bottle: CellarBottle }) {
         <div className="text-right shrink-0 space-y-1">
           <p className="font-bold text-sm" style={{ color: '#3a1a20' }}>×{bottle.quantity}</p>
           <WindowStatusPill status={status} compact />
+          <span className="text-xs" style={{ color: '#c4a090' }}>›</span>
         </div>
       </div>
-    </div>
+    </Link>
   )
 }
