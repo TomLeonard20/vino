@@ -15,7 +15,6 @@ interface BottleSnapshot {
 }
 
 export async function POST(req: NextRequest) {
-  // Auth check
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
@@ -25,35 +24,38 @@ export async function POST(req: NextRequest) {
   if (!meal?.trim()) {
     return NextResponse.json({ error: 'Meal description is required' }, { status: 400 })
   }
-  if (!bottles?.length) {
-    return NextResponse.json({ error: 'No bottles in cellar' }, { status: 400 })
-  }
 
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey || apiKey.startsWith('sk-ant-REPLACE')) {
-    // Return stub data when API key is not configured
-    return NextResponse.json(stubResponse(bottles))
+    return NextResponse.json(stubResponse(bottles ?? []))
   }
 
-  const systemPrompt = `You are a master sommelier AI. Given a meal description and a list of wines with flavour profiles, rank the wines by food pairing suitability and suggest ideal styles.
+  const systemPrompt = `You are a master sommelier AI. Given a meal description and (optionally) a list of wines from someone's cellar, do two things:
 
-Respond with ONLY valid JSON matching this schema:
+1. If cellar wines are provided, rank ALL of them by food-pairing suitability (score 0–100).
+2. Always suggest 4–5 ideal wine styles or grapes that pair best, each with a pairing score (0–100).
+
+Respond with ONLY valid JSON — no markdown, no prose:
 {
   "cellarRankings": [
-    { "bottleId": "<string>", "score": <0-100 int>, "reason": "<one sentence max 120 chars>" }
+    { "bottleId": "<string>", "score": <0-100 int>, "reason": "<one sentence, max 120 chars>" }
   ],
   "idealStyles": [
-    { "name": "<grape or style>", "why": "<one sentence max 120 chars>", "confidence": "Classic" | "Recommended" | "Adventurous" }
+    { "name": "<grape or style>", "score": <0-100 int>, "why": "<one sentence, max 120 chars>", "confidence": "Classic" | "Recommended" | "Adventurous" }
   ]
 }
 
 Rules:
-- Rank ALL wines provided; include every bottleId.
-- Ranking is purely flavour-based — ignore drinking window.
-- Provide 3–5 ideal styles.
-- Return valid JSON only; no markdown, no prose.`
+- Include EVERY bottleId provided in cellarRankings (empty array if none provided).
+- Score reflects flavour compatibility only — ignore drinking window readiness.
+- Ideal styles must include a numeric score 0–100 (100 = perfect match).
+- Return valid JSON only.`
 
-  const userMessage = `Meal: ${meal}\n\nCellar wines:\n${JSON.stringify(bottles, null, 2)}`
+  const cellarSection = bottles?.length
+    ? `\n\nCellar wines:\n${JSON.stringify(bottles, null, 2)}`
+    : '\n\nCellar wines: none provided — skip cellarRankings (return empty array).'
+
+  const userMessage = `Meal: ${meal}${cellarSection}`
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -95,9 +97,10 @@ function stubResponse(bottles: BottleSnapshot[]) {
       reason: 'The full body and structure complement the richness of this dish beautifully.',
     })),
     idealStyles: [
-      { name: 'Barossa Shiraz', why: 'Classic pairing with grilled red meat.', confidence: 'Classic' },
-      { name: 'Côtes du Rhône', why: 'Herbal notes bridge the sauce elegantly.', confidence: 'Recommended' },
-      { name: 'Argentinian Malbec', why: 'Plummy fruit cuts through the fat.', confidence: 'Adventurous' },
+      { name: 'Barossa Shiraz',      score: 92, why: 'Bold fruit and pepper notes are a classic match.',        confidence: 'Classic'     },
+      { name: 'Côtes du Rhône',      score: 85, why: 'Herbal notes bridge the sauce elegantly.',                confidence: 'Recommended' },
+      { name: 'Argentinian Malbec',  score: 78, why: 'Plummy fruit cuts through the fat.',                      confidence: 'Recommended' },
+      { name: 'Napa Valley Cab Sav', score: 70, why: 'Firm tannins contrast beautifully with rich meat.',       confidence: 'Adventurous' },
     ],
     _stub: true,
   }
