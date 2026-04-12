@@ -1,6 +1,5 @@
 'use client'
 
-// Current year is injected at render time so the chart always shows the right "NOW" position
 const NOW = new Date().getFullYear()
 
 interface Props {
@@ -9,151 +8,189 @@ interface Props {
   drinkTo:   number
 }
 
-export default function DrinkingWindowChart({ drinkFrom, peak, drinkTo }: Props) {
-  // Axis runs from 2 years before open → 3 years past close
-  const axisStart = drinkFrom - 2
-  const axisEnd   = drinkTo   + 3
-  const span      = axisEnd - axisStart
-
-  /** Convert a year to a 0–100 percentage along the axis */
-  function pct(year: number) {
-    return ((year - axisStart) / span) * 100
-  }
-
-  const nowPct    = Math.min(Math.max(pct(NOW), 0), 100)
-  const nowInside = NOW >= axisStart && NOW <= axisEnd
-
-  // Status copy
-  const yearsUntilOpen = drinkFrom - NOW
-  const yearsPastClose = NOW - drinkTo
-  let statusLabel = ''
-  let statusColor = '#a07060'
-  if (NOW < drinkFrom) {
-    statusLabel = yearsUntilOpen === 1 ? 'Ready next year' : `Too young · opens in ${yearsUntilOpen} yr${yearsUntilOpen > 1 ? 's' : ''}`
-    statusColor = '#a07060'
-  } else if (NOW === peak) {
-    statusLabel = '★ At peak right now'
-    statusColor = '#8b2035'
-  } else if (NOW > drinkTo) {
-    statusLabel = `Past peak · ${yearsPastClose} yr${yearsPastClose > 1 ? 's' : ''} past best`
-    statusColor = '#a07060'
-  } else if (NOW >= drinkFrom && NOW < peak) {
-    statusLabel = `Drinking window open · peak in ${peak - NOW} yr${(peak - NOW) > 1 ? 's' : ''}`
-    statusColor = '#2e7d32'
+/** Bell-curve height for a bar at `year`, peaking at 1.0 at `peak` */
+function barHeight(year: number, drinkFrom: number, peak: number, drinkTo: number): number {
+  if (year < drinkFrom || year > drinkTo) return 0
+  // Asymmetric bell: steeper rise, longer decline
+  if (year <= peak) {
+    const t = (year - drinkFrom) / Math.max(peak - drinkFrom, 1)
+    return Math.pow(t, 0.7)   // concave up on the rise
   } else {
-    statusLabel = `Drinking now · best before ${drinkTo}`
-    statusColor = '#c07000'
+    const t = (year - peak) / Math.max(drinkTo - peak, 1)
+    return 1 - Math.pow(t, 0.9)
   }
+}
 
-  // Section widths as percentages
-  const preWidth     = pct(drinkFrom) - 0                          // before open
-  const risingWidth  = pct(peak)      - pct(drinkFrom)             // open → peak
-  const declWidth    = pct(drinkTo)   - pct(peak)                  // peak → close
-  const postWidth    = 100            - pct(drinkTo)               // after close
+/** Human-readable status based on NOW vs window */
+function statusInfo(drinkFrom: number, peak: number, drinkTo: number) {
+  const yearsToPeak  = peak - NOW
+  const yearsPastPeak = NOW - peak
+  const yearsToOpen  = drinkFrom - NOW
+  const yearsPastClose = NOW - drinkTo
 
-  // Year tick marks to show below bar
-  const ticks = Array.from(
-    new Set([drinkFrom, peak, drinkTo, NOW].filter(y => y >= axisStart && y <= axisEnd))
-  ).sort((a, b) => a - b)
+  if (NOW < drinkFrom) {
+    return {
+      label: yearsToOpen === 1
+        ? 'Opens next year'
+        : `Opens in ${yearsToOpen} years`,
+      pill:  'Too young',
+      pillBg: '#5c3317',
+      pillText: '#f5ede6',
+      dot:   '#a07060',
+    }
+  }
+  if (NOW > drinkTo) {
+    return {
+      label: yearsPastClose === 1
+        ? '1 year past drinking window'
+        : `${yearsPastClose} years past drinking window`,
+      pill:  'Past peak',
+      pillBg: '#4a2010',
+      pillText: '#c4a090',
+      dot:   '#a07060',
+    }
+  }
+  if (NOW === peak) {
+    return {
+      label: 'At peak right now',
+      pill:  'At peak',
+      pillBg: '#8b2035',
+      pillText: 'white',
+      dot:   '#8b2035',
+    }
+  }
+  if (NOW < peak) {
+    return {
+      label: yearsToPeak === 1
+        ? 'Drink window · peaks next year'
+        : `Drink window · ${yearsToPeak} years to peak`,
+      pill:  'Drink now',
+      pillBg: '#1a4d1e',
+      pillText: '#a8e6ab',
+      dot:   '#4caf50',
+    }
+  }
+  // Past peak but still in window
+  return {
+    label: yearsPastPeak === 1
+      ? 'Drink window · 1 year past peak'
+      : `Drink window · ${yearsPastPeak} years past peak`,
+    pill:  'Drink now',
+    pillBg: '#1a4d1e',
+    pillText: '#a8e6ab',
+    dot:   '#4caf50',
+  }
+}
+
+export default function DrinkingWindowChart({ drinkFrom, peak, drinkTo }: Props) {
+  const axisStart = drinkFrom - 1
+  const axisEnd   = drinkTo   + 2
+  const years     = Array.from({ length: axisEnd - axisStart + 1 }, (_, i) => axisStart + i)
+
+  const status = statusInfo(drinkFrom, peak, drinkTo)
+
+  // Clamp NOW marker within visible range
+  const nowClamped = Math.min(Math.max(NOW, axisStart), axisEnd)
+  const nowPct     = ((nowClamped - axisStart) / (axisEnd - axisStart)) * 100
 
   return (
-    <div className="space-y-3">
-      {/* Status line */}
-      <p className="text-xs font-semibold" style={{ color: statusColor }}>{statusLabel}</p>
+    <div className="rounded-2xl overflow-hidden" style={{ background: '#1c0a10' }}>
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between px-4 pt-4 pb-2">
+        <span className="text-xs font-bold tracking-widest uppercase"
+              style={{ color: '#7a4a54', letterSpacing: '0.12em' }}>
+          Drinking Window
+        </span>
+        {/* Status pill */}
+        <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full"
+              style={{ background: status.pillBg, color: status.pillText }}>
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: status.dot }} />
+          {status.pill}
+        </span>
+      </div>
 
-      {/* Bar */}
-      <div className="relative" style={{ height: 44 }}>
-        {/* Track */}
-        <div className="absolute inset-y-3 left-0 right-0 rounded-full overflow-hidden flex">
-          {/* Pre-window */}
-          <div style={{ width: `${preWidth}%`, background: '#e2cfc4', flexShrink: 0 }} />
-          {/* Rising: open → peak */}
-          <div style={{
-            width:      `${risingWidth}%`,
-            background: 'linear-gradient(to right, #7fb069, #2e7d32)',
-            flexShrink: 0,
-          }} />
-          {/* Declining: peak → close */}
-          <div style={{
-            width:      `${declWidth}%`,
-            background: 'linear-gradient(to right, #2e7d32, #c07000)',
-            flexShrink: 0,
-          }} />
-          {/* Post-window */}
-          <div style={{ width: `${postWidth}%`, background: '#e2cfc4', flexShrink: 0 }} />
-        </div>
+      {/* ── Bar chart ── */}
+      <div className="relative px-4 pb-0" style={{ height: 110 }}>
+        {/* Bars */}
+        <div className="absolute bottom-0 left-4 right-4 flex items-end gap-px" style={{ height: 90 }}>
+          {years.map(year => {
+            const h       = barHeight(year, drinkFrom, peak, drinkTo)
+            const inWindow = year >= drinkFrom && year <= drinkTo
+            const isPeak   = year === peak
 
-        {/* Peak marker — diamond on top of bar */}
-        <div
-          className="absolute top-0 flex flex-col items-center"
-          style={{ left: `${pct(peak)}%`, transform: 'translateX(-50%)' }}
-        >
-          <div
-            className="w-3.5 h-3.5 rotate-45 border-2 border-white"
-            style={{ background: '#8b2035', marginBottom: 2 }}
-          />
+            // Colour: dark burgundy outside window, brighter inside, brightest at peak
+            let bg = '#2a1018'
+            if (inWindow) {
+              const intensity = 0.4 + h * 0.6
+              if (isPeak) {
+                bg = '#c4405a'
+              } else {
+                // Interpolate from dim rose to bright rose
+                const r = Math.round(100 + intensity * 96)
+                const g = Math.round(20  + intensity * 24)
+                const b = Math.round(40  + intensity * 40)
+                bg = `rgb(${r},${g},${b})`
+              }
+            }
+
+            return (
+              <div
+                key={year}
+                className="flex-1 rounded-t-sm transition-all"
+                style={{
+                  height:     `${Math.max(h * 100, inWindow ? 8 : 3)}%`,
+                  background: bg,
+                  minWidth:   2,
+                  opacity:    inWindow ? 1 : 0.4,
+                }}
+              />
+            )
+          })}
         </div>
 
         {/* NOW line */}
-        {nowInside && (
+        {NOW >= axisStart && NOW <= axisEnd && (
           <div
-            className="absolute inset-y-0 flex flex-col items-center z-10"
-            style={{ left: `${nowPct}%`, transform: 'translateX(-50%)' }}
+            className="absolute bottom-0 z-10 flex flex-col items-center"
+            style={{
+              left:      `calc(1rem + ${nowPct}% * (100% - 2rem) / 100)`,
+              transform: 'translateX(-50%)',
+              height:    100,
+            }}
           >
-            <div className="flex-1 w-0.5 bg-white/90" style={{ marginTop: 2, marginBottom: 2 }} />
+            <span className="text-white text-xs font-semibold mb-1"
+                  style={{ fontSize: 10, letterSpacing: '0.02em' }}>
+              Now
+            </span>
+            <div className="flex-1 w-px" style={{ background: 'rgba(255,255,255,0.7)' }} />
           </div>
         )}
       </div>
 
-      {/* Year labels */}
-      <div className="relative h-8">
-        {ticks.map(year => {
-          const p   = pct(year)
-          const isNow  = year === NOW
-          const isPeak = year === peak
-          // Clamp label so it doesn't overflow edges
-          const clampedLeft = Math.min(Math.max(p, 4), 96)
-          return (
-            <div
-              key={year}
-              className="absolute flex flex-col items-center"
-              style={{ left: `${clampedLeft}%`, transform: 'translateX(-50%)' }}
-            >
-              {/* Tick mark */}
-              <div className="w-px h-1.5 mb-0.5"
-                   style={{ background: isNow ? '#3a1a20' : '#c4a090' }} />
-              <span
-                className="text-xs font-semibold whitespace-nowrap"
-                style={{ color: isNow ? '#3a1a20' : isPeak ? '#8b2035' : '#a07060' }}
-              >
-                {isNow && !isPeak ? `${year} ▲` : year}
-              </span>
-              {isPeak && (
-                <span className="text-xs font-bold" style={{ color: '#8b2035', lineHeight: 1 }}>
-                  PEAK
-                </span>
-              )}
-            </div>
-          )
-        })}
+      {/* ── Footer labels ── */}
+      <div className="relative px-4 pt-2 pb-4" style={{ height: 48 }}>
+        {/* Opens */}
+        <div className="absolute" style={{ left: `calc(1rem + ${((drinkFrom - axisStart) / (axisEnd - axisStart)) * 100}% * (100% - 2rem) / 100)`, transform: 'translateX(-50%)' }}>
+          <p className="text-base font-bold" style={{ color: 'white' }}>{drinkFrom}</p>
+          <p className="text-xs" style={{ color: '#7a4a54' }}>Opens</p>
+        </div>
+
+        {/* Peak */}
+        <div className="absolute" style={{ left: `calc(1rem + ${((peak - axisStart) / (axisEnd - axisStart)) * 100}% * (100% - 2rem) / 100)`, transform: 'translateX(-50%)' }}>
+          <p className="text-base font-bold" style={{ color: 'white' }}>{peak}</p>
+          <p className="text-xs" style={{ color: '#7a4a54' }}>Peak</p>
+        </div>
+
+        {/* Closes */}
+        <div className="absolute" style={{ left: `calc(1rem + ${((drinkTo - axisStart) / (axisEnd - axisStart)) * 100}% * (100% - 2rem) / 100)`, transform: 'translateX(-50%)' }}>
+          <p className="text-base font-bold" style={{ color: 'white' }}>{drinkTo}</p>
+          <p className="text-xs" style={{ color: '#7a4a54' }}>Closes</p>
+        </div>
       </div>
 
-      {/* Legend */}
-      <div className="flex flex-wrap gap-3 pt-1">
-        {[
-          { color: '#7fb069', label: 'Drinking window' },
-          { color: '#8b2035', label: 'Peak'            },
-          { color: '#e2cfc4', label: 'Outside window'  },
-        ].map(({ color, label }) => (
-          <div key={label} className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-sm" style={{ background: color }} />
-            <span className="text-xs" style={{ color: '#a07060' }}>{label}</span>
-          </div>
-        ))}
-        <div className="flex items-center gap-1.5">
-          <div className="w-0.5 h-3 bg-gray-700 rounded" />
-          <span className="text-xs" style={{ color: '#a07060' }}>Now ({NOW})</span>
-        </div>
+      {/* ── Status line ── */}
+      <div className="px-4 pb-4">
+        <p className="text-xs" style={{ color: '#9a6070' }}>{status.label}</p>
       </div>
     </div>
   )
