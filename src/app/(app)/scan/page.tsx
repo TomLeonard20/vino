@@ -5,10 +5,14 @@ import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import ScoreBadge from '@/components/ui/ScoreBadge'
 import { createClient } from '@/lib/supabase/client'
-import type { WineType, Currency } from '@/types/database'
+import type { WineType } from '@/types/database'
 import type { DrinkingWindowResult } from '@/app/api/drinking-window/route'
 
+const LabelScanner  = dynamic(() => import('@/components/LabelScanner'),  { ssr: false })
 const BarcodeScanner = dynamic(() => import('@/components/BarcodeScanner'), { ssr: false })
+
+type ScanMode  = 'label' | 'barcode'
+type ScanState = 'scanning' | 'processing' | 'estimating' | 'found' | 'not_found' | 'no_barcode' | 'manual'
 
 interface ScannedWine {
   name: string
@@ -18,45 +22,69 @@ interface ScannedWine {
   grapes: string[]
   criticScore: number | null
   source: string
-  // filled in after Claude estimation
   drinkFrom?: number
   peak?: number
   drinkTo?: number
   drinkRationale?: string
 }
 
-type ScanState = 'scanning' | 'no_barcode' | 'looking_up' | 'estimating' | 'found' | 'not_found' | 'manual'
-
 export default function ScanPage() {
   const router = useRouter()
+  const [mode,  setMode]  = useState<ScanMode>('label')
   const [state, setState] = useState<ScanState>('scanning')
-  const [wine, setWine] = useState<ScannedWine | null>(null)
+  const [wine,  setWine]  = useState<ScannedWine | null>(null)
 
-  async function handleDetected(barcode: string) {
-    setState('looking_up')
+  // ── Label flow ──────────────────────────────────────────────
+  async function handleCapture(base64Jpeg: string) {
+    setState('processing')
 
-    // 1. Look up barcode via Open Food Facts
-    const lookupRes = await fetch(`/api/wine-lookup?barcode=${encodeURIComponent(barcode)}`)
-    const lookupData = await lookupRes.json()
+    const res  = await fetch('/api/label-scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: base64Jpeg }),
+    })
+    const data = await res.json()
 
-    if (!lookupData.found) {
+    if (!data.found) {
       setState('not_found')
       return
     }
 
-    const found: ScannedWine = lookupData.wine
+    await fetchDrinkingWindow(data.wine)
+  }
 
-    // 2. Ask Claude to estimate the drinking window
+  // ── Barcode flow ────────────────────────────────────────────
+  async function handleDetected(barcode: string) {
+    setState('processing')
+
+    const res  = await fetch(`/api/wine-lookup?barcode=${encodeURIComponent(barcode)}`)
+    const data = await res.json()
+
+    if (!data.found) {
+      setState('not_found')
+      return
+    }
+
+    await fetchDrinkingWindow(data.wine)
+  }
+
+  function handleNoBarcode() {
+    setState('no_barcode')
+  }
+
+  // ── Shared: estimate drinking window ───────────────────────
+  async function fetchDrinkingWindow(found: ScannedWine) {
     setState('estimating')
+
     const windowRes = await fetch('/api/drinking-window', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: found.name,
+        name:     found.name,
         producer: found.producer,
-        region: found.region,
-        vintage: found.vintage,
-        grapes: found.grapes,
+        region:   found.region,
+        vintage:  found.vintage,
+        grapes:   found.grapes,
         wineType: 'Red',
       }),
     })
@@ -64,16 +92,12 @@ export default function ScanPage() {
 
     setWine({
       ...found,
-      drinkFrom: window.drinkFrom,
-      peak: window.peak,
-      drinkTo: window.drinkTo,
+      drinkFrom:     window.drinkFrom,
+      peak:          window.peak,
+      drinkTo:       window.drinkTo,
       drinkRationale: window.rationale,
     })
     setState('found')
-  }
-
-  function handleNoBarcode() {
-    setState('no_barcode')
   }
 
   function rescan() {
@@ -81,46 +105,96 @@ export default function ScanPage() {
     setState('scanning')
   }
 
+  function switchMode(next: ScanMode) {
+    setMode(next)
+    rescan()
+  }
+
+  const busy = state === 'processing' || state === 'estimating'
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black">
-      {/* Close */}
-      <button
-        onClick={() => router.back()}
-        className="absolute top-4 left-4 z-30 w-10 h-10 rounded-full flex items-center justify-center text-white"
-        style={{ background: 'rgba(0,0,0,0.5)' }}
-        aria-label="Close"
-      >
-        ✕
-      </button>
 
-      {/* Camera */}
+      {/* ── Header bar ── */}
+      <div className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-4 pt-4 pb-2">
+        {/* Close */}
+        <button
+          onClick={() => router.back()}
+          className="w-10 h-10 rounded-full flex items-center justify-center text-white shrink-0"
+          style={{ background: 'rgba(0,0,0,0.5)' }}
+          aria-label="Close"
+        >
+          ✕
+        </button>
+
+        {/* Mode tabs */}
+        <div
+          className="flex rounded-full p-1 gap-1"
+          style={{ background: 'rgba(0,0,0,0.6)' }}
+        >
+          {(['label', 'barcode'] as ScanMode[]).map(m => (
+            <button
+              key={m}
+              onClick={() => switchMode(m)}
+              className="px-4 py-1.5 rounded-full text-sm font-medium transition-colors"
+              style={{
+                background: mode === m ? 'white' : 'transparent',
+                color:      mode === m ? '#3a1a20' : 'rgba(255,255,255,0.6)',
+              }}
+            >
+              {m === 'label' ? '📷 Scan label' : '▦ Scan barcode'}
+            </button>
+          ))}
+        </div>
+
+        {/* Spacer to balance close button */}
+        <div className="w-10" />
+      </div>
+
+      {/* ── Camera area ── */}
       <div className="flex-1 relative">
-        <BarcodeScanner
-          onDetected={handleDetected}
-          onNoBarcode={handleNoBarcode}
-          active={state === 'scanning'}
-        />
+        {mode === 'label' ? (
+          <LabelScanner
+            onCapture={handleCapture}
+            active={state === 'scanning'}
+          />
+        ) : (
+          <BarcodeScanner
+            onDetected={handleDetected}
+            onNoBarcode={handleNoBarcode}
+            active={state === 'scanning'}
+          />
+        )}
 
-        {/* Overlays */}
+        {/* ── Bottom overlays ── */}
         <div className="absolute bottom-6 left-4 right-4 z-20 flex flex-col items-center gap-3">
 
-          {state === 'scanning' && (
-            <p className="text-white text-sm text-center px-4 py-2 rounded-full"
-               style={{ background: 'rgba(0,0,0,0.6)' }}>
-              Point at the barcode on the bottle
-            </p>
-          )}
-
-          {(state === 'looking_up' || state === 'estimating') && (
-            <div className="flex items-center gap-2 px-4 py-2 rounded-full"
-                 style={{ background: 'rgba(0,0,0,0.7)' }}>
+          {/* Processing / estimating spinner */}
+          {busy && (
+            <div
+              className="flex items-center gap-2 px-4 py-2 rounded-full"
+              style={{ background: 'rgba(0,0,0,0.75)' }}
+            >
               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
               <p className="text-white text-sm">
-                {state === 'looking_up' ? 'Looking up wine…' : 'Estimating drinking window…'}
+                {state === 'processing'
+                  ? (mode === 'label' ? 'Reading label…' : 'Looking up wine…')
+                  : 'Estimating drinking window…'}
               </p>
             </div>
           )}
 
+          {/* Barcode mode: scanning hint */}
+          {state === 'scanning' && mode === 'barcode' && (
+            <p
+              className="text-white text-sm text-center px-4 py-2 rounded-full"
+              style={{ background: 'rgba(0,0,0,0.6)' }}
+            >
+              Point at the barcode on the bottle
+            </p>
+          )}
+
+          {/* No barcode detected */}
           {state === 'no_barcode' && (
             <div className="w-full space-y-2">
               <p className="text-white text-sm text-center px-4 py-2 rounded-full"
@@ -140,11 +214,12 @@ export default function ScanPage() {
             </div>
           )}
 
+          {/* Not found */}
           {state === 'not_found' && (
             <div className="w-full space-y-2">
               <p className="text-white text-sm text-center px-4 py-2 rounded-full"
                  style={{ background: 'rgba(0,0,0,0.6)' }}>
-                Wine not found in database
+                {mode === 'label' ? 'Couldn\'t read the label' : 'Wine not found in database'}
               </p>
               <button onClick={() => setState('manual')}
                       className="w-full py-3 rounded-xl text-white font-semibold text-sm"
@@ -154,11 +229,12 @@ export default function ScanPage() {
               <button onClick={rescan}
                       className="w-full py-2 text-sm"
                       style={{ color: 'rgba(255,255,255,0.6)' }}>
-                Try scanning again
+                Try again
               </button>
             </div>
           )}
 
+          {/* Found → confirm sheet */}
           {state === 'found' && wine && (
             <WineConfirmSheet
               wine={wine}
@@ -167,6 +243,7 @@ export default function ScanPage() {
             />
           )}
 
+          {/* Manual entry */}
           {state === 'manual' && (
             <ManualEntrySheet
               onDone={() => router.push('/cellar')}
@@ -190,7 +267,7 @@ function WineConfirmSheet({
   onRescan: () => void
   onDone: () => void
 }) {
-  const [status, setStatus] = useState<'idle' | 'saving' | 'done'>('idle')
+  const [status,   setStatus]   = useState<'idle' | 'saving' | 'done'>('idle')
   const [wineType, setWineType] = useState<WineType>('Red')
   const supabase = createClient()
 
@@ -199,18 +276,17 @@ function WineConfirmSheet({
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    // Insert wine
     const { data: wineRow, error: wineErr } = await supabase
       .from('wines')
       .insert({
-        user_id: user.id,
-        name: wine.name,
-        producer: wine.producer,
-        region: wine.region,
-        vintage: wine.vintage,
-        grapes: wine.grapes,
+        user_id:      user.id,
+        name:         wine.name,
+        producer:     wine.producer,
+        region:       wine.region,
+        vintage:      wine.vintage,
+        grapes:       wine.grapes,
         critic_score: wine.criticScore,
-        db_source: wine.source,
+        db_source:    wine.source,
       })
       .select()
       .single()
@@ -221,27 +297,25 @@ function WineConfirmSheet({
       return
     }
 
-    // Insert cellar bottle
     if (action === 'cellar' || action === 'both') {
       await supabase.from('cellar_bottles').insert({
-        user_id: user.id,
-        wine_id: wineRow.id,
+        user_id:   user.id,
+        wine_id:   wineRow.id,
         wine_type: wineType,
-        quantity: 1,
+        quantity:  1,
         drink_from: wine.drinkFrom,
-        peak: wine.peak,
-        drink_to: wine.drinkTo,
+        peak:       wine.peak,
+        drink_to:   wine.drinkTo,
       })
     }
 
-    // Insert quick tasting note placeholder
     if (action === 'note' || action === 'both') {
       await supabase.from('tasting_notes').insert({
-        user_id: user.id,
-        wine_id: wineRow.id,
-        mode: 'quick',
-        score: 88,
-        stars: 3,
+        user_id:   user.id,
+        wine_id:   wineRow.id,
+        mode:      'quick',
+        score:     88,
+        stars:     3,
         free_text: '',
       })
     }
@@ -275,7 +349,6 @@ function WineConfirmSheet({
               </span>
             ))}
         </div>
-        {/* Drinking window */}
         {wine.drinkFrom && (
           <div className="mt-1 text-xs text-white/80 flex items-center gap-1">
             <span>🍷</span>
@@ -302,7 +375,7 @@ function WineConfirmSheet({
               className="flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors"
               style={{
                 background: wineType === t ? '#8b2035' : 'rgba(255,255,255,0.08)',
-                color: wineType === t ? 'white' : '#c4a090',
+                color:      wineType === t ? 'white'   : '#c4a090',
               }}
             >
               {t}
@@ -338,10 +411,12 @@ function WineConfirmSheet({
             ))}
           </>
         )}
-        <button onClick={onRescan}
-                className="w-full text-xs py-1.5"
-                style={{ color: 'rgba(255,255,255,0.4)' }}>
-          Rescan · Search manually
+        <button
+          onClick={onRescan}
+          className="w-full text-xs py-1.5"
+          style={{ color: 'rgba(255,255,255,0.4)' }}
+        >
+          Scan again · Enter manually
         </button>
       </div>
     </div>
@@ -351,13 +426,13 @@ function WineConfirmSheet({
 // ─── Manual entry sheet ───────────────────────────────────────
 
 function ManualEntrySheet({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
-  const [name, setName] = useState('')
+  const [name,     setName]     = useState('')
   const [producer, setProducer] = useState('')
-  const [region, setRegion] = useState('')
-  const [vintage, setVintage] = useState('')
+  const [region,   setRegion]   = useState('')
+  const [vintage,  setVintage]  = useState('')
   const [wineType, setWineType] = useState<WineType>('Red')
-  const [status, setStatus] = useState<'idle' | 'estimating' | 'saving' | 'done'>('idle')
-  const [window, setWindow] = useState<DrinkingWindowResult | null>(null)
+  const [status,   setStatus]   = useState<'idle' | 'estimating' | 'saving' | 'done'>('idle')
+  const [window,   setWindow]   = useState<DrinkingWindowResult | null>(null)
   const supabase = createClient()
 
   async function estimate() {
@@ -381,12 +456,12 @@ function ManualEntrySheet({ onDone, onCancel }: { onDone: () => void; onCancel: 
     const { data: wineRow } = await supabase
       .from('wines')
       .insert({
-        user_id: user.id,
-        name: name.trim(),
+        user_id:  user.id,
+        name:     name.trim(),
         producer: producer.trim(),
-        region: region.trim(),
-        vintage: vintage ? parseInt(vintage) : null,
-        grapes: [],
+        region:   region.trim(),
+        vintage:  vintage ? parseInt(vintage) : null,
+        grapes:   [],
         db_source: 'Manual entry',
       })
       .select()
@@ -394,13 +469,13 @@ function ManualEntrySheet({ onDone, onCancel }: { onDone: () => void; onCancel: 
 
     if (wineRow) {
       await supabase.from('cellar_bottles').insert({
-        user_id: user.id,
-        wine_id: wineRow.id,
-        wine_type: wineType,
-        quantity: 1,
+        user_id:    user.id,
+        wine_id:    wineRow.id,
+        wine_type:  wineType,
+        quantity:   1,
         drink_from: window?.drinkFrom,
-        peak: window?.peak,
-        drink_to: window?.drinkTo,
+        peak:       window?.peak,
+        drink_to:   window?.drinkTo,
       })
     }
 
@@ -411,9 +486,9 @@ function ManualEntrySheet({ onDone, onCancel }: { onDone: () => void; onCancel: 
   const WINE_TYPES: WineType[] = ['Red', 'White', 'Rosé', 'Champagne']
 
   const inputStyle = {
-    background: 'rgba(255,255,255,0.08)',
+    background:  'rgba(255,255,255,0.08)',
     borderColor: 'rgba(255,255,255,0.15)',
-    color: 'white',
+    color:       'white',
   }
 
   return (
@@ -436,21 +511,19 @@ function ManualEntrySheet({ onDone, onCancel }: { onDone: () => void; onCancel: 
                placeholder="Region" className="w-full px-3 py-2 rounded-lg text-sm border"
                style={inputStyle} />
 
-        {/* Wine type */}
         <div className="flex gap-1.5">
           {WINE_TYPES.map(t => (
             <button key={t} onClick={() => setWineType(t)}
                     className="flex-1 py-1.5 rounded-lg text-xs font-medium"
                     style={{
                       background: wineType === t ? '#8b2035' : 'rgba(255,255,255,0.08)',
-                      color: wineType === t ? 'white' : '#c4a090',
+                      color:      wineType === t ? 'white'   : '#c4a090',
                     }}>
               {t}
             </button>
           ))}
         </div>
 
-        {/* Drinking window estimate */}
         {window ? (
           <div className="text-xs rounded-lg px-3 py-2"
                style={{ background: 'rgba(139,32,53,0.3)', color: '#f5ede6' }}>
@@ -461,14 +534,14 @@ function ManualEntrySheet({ onDone, onCancel }: { onDone: () => void; onCancel: 
           <button onClick={estimate} disabled={!name.trim() || status === 'estimating'}
                   className="w-full py-2 rounded-lg text-xs font-medium border"
                   style={{
-                    borderColor: '#8b2035', color: '#f5ede6',
-                    opacity: !name.trim() || status === 'estimating' ? 0.5 : 1,
+                    borderColor: '#8b2035',
+                    color:       '#f5ede6',
+                    opacity:     !name.trim() || status === 'estimating' ? 0.5 : 1,
                   }}>
             {status === 'estimating' ? '✨ Estimating…' : '✨ Estimate drinking window with AI'}
           </button>
         )}
 
-        {/* Save / cancel */}
         {status === 'done' ? (
           <p className="text-center text-white py-1">✓ Saved!</p>
         ) : (

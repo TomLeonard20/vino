@@ -93,7 +93,7 @@ export default async function HomePage() {
           <rect x="7" y="7" width="3" height="10"/>
           <rect x="14" y="7" width="3" height="10"/>
         </svg>
-        Scan a bottle
+        Add a bottle
       </a>
 
       {/* Recent notes */}
