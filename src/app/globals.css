@@ -1,0 +1,40 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --parchment: #f5ede6;
+  --parchment-secondary: #ecddd4;
+  --burgundy: #8b2035;
+  --burgundy-dark: #3a1a20;
+  --text-primary: #3a1a20;
+  --text-secondary: #a07060;
+  --text-muted: #c4a090;
+  --border: #d4b8aa;
+}
+
+html {
+  background-color: var(--parchment);
+}
+
+body {
+  background-color: var(--parchment);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--parchment-secondary); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* Focus ring */
+*:focus-visible {
+  outline: 2px solid var(--burgundy);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
