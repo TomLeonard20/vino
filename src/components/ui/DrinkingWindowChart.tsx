@@ -3,9 +3,10 @@
 const NOW = new Date().getFullYear()
 
 interface Props {
-  drinkFrom: number
-  peak:      number
-  drinkTo:   number
+  drinkFrom:  number
+  peak:       number
+  drinkTo:    number
+  estimated?: boolean
 }
 
 /** Bell-curve height for a bar at `year`, peaking at 1.0 at `peak` */
@@ -82,9 +83,10 @@ function statusInfo(drinkFrom: number, peak: number, drinkTo: number) {
   }
 }
 
-export default function DrinkingWindowChart({ drinkFrom, peak, drinkTo }: Props) {
+export default function DrinkingWindowChart({ drinkFrom, peak, drinkTo, estimated }: Props) {
   const axisStart = drinkFrom - 1
-  const axisEnd   = drinkTo   + 2
+  // Always show at least 10 years on the axis
+  const axisEnd   = Math.max(drinkTo + 2, axisStart + 10)
   const years     = Array.from({ length: axisEnd - axisStart + 1 }, (_, i) => axisStart + i)
 
   const status = statusInfo(drinkFrom, peak, drinkTo)
@@ -97,10 +99,15 @@ export default function DrinkingWindowChart({ drinkFrom, peak, drinkTo }: Props)
     <div className="rounded-2xl overflow-hidden" style={{ background: '#1c0a10' }}>
       {/* ── Header ── */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
-        <span className="text-xs font-bold tracking-widest uppercase"
-              style={{ color: '#7a4a54', letterSpacing: '0.12em' }}>
-          Drinking Window
-        </span>
+        <div>
+          <span className="text-xs font-bold tracking-widest uppercase"
+                style={{ color: '#7a4a54', letterSpacing: '0.12em' }}>
+            Drinking Window
+          </span>
+          {estimated && (
+            <span className="ml-2 text-xs" style={{ color: '#5a3040' }}>· estimated</span>
+          )}
+        </div>
         {/* Status pill */}
         <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full"
               style={{ background: status.pillBg, color: status.pillText }}>

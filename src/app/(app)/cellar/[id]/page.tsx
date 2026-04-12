@@ -42,7 +42,34 @@ export default async function WineDetailPage({
   const notes = (wine.tasting_notes ?? []) as TastingNote[]
   const fp    = wine.flavour_profile as FlavourProfile | null
 
-  const hasWindow = b.drink_from && b.drink_to && b.peak
+  const hasWindow = !!(b.drink_from && b.drink_to && b.peak)
+
+  // Estimate a drinking window from vintage + wine type when none is set
+  function estimateWindow(vintage: number | null, wineType: string) {
+    const base = vintage ?? new Date().getFullYear()
+    switch (wineType) {
+      case 'Champagne': return { drinkFrom: base + 4, peak: base + 10, drinkTo: base + 20 }
+      case 'White':     return { drinkFrom: base + 1, peak: base + 3,  drinkTo: base + 7  }
+      case 'Rosé':      return { drinkFrom: base,     peak: base + 1,  drinkTo: base + 3  }
+      default:          return { drinkFrom: base + 2, peak: base + 7,  drinkTo: base + 14 }
+    }
+  }
+
+  const drinkWindow = hasWindow
+    ? { drinkFrom: b.drink_from!, peak: b.peak!, drinkTo: b.drink_to! }
+    : estimateWindow(wine.vintage, b.wine_type)
+
+  // Estimated flavour profile by wine type when no real data exists
+  const DEFAULT_FP: Record<string, Omit<FlavourProfile, 'id' | 'wine_id'>> = {
+    Red:       { body: 62, tannins: 58, acidity: 52, alcohol: 62, sweetness: 12, fruit: 65, oak: 48, finish: 58 },
+    White:     { body: 38, tannins:  5, acidity: 68, alcohol: 48, sweetness: 30, fruit: 52, oak: 15, finish: 45 },
+    Rosé:      { body: 35, tannins: 10, acidity: 60, alcohol: 45, sweetness: 35, fruit: 55, oak:  5, finish: 40 },
+    Champagne: { body: 40, tannins:  5, acidity: 72, alcohol: 50, sweetness: 20, fruit: 50, oak: 12, finish: 62 },
+    Sparkling: { body: 38, tannins:  5, acidity: 70, alcohol: 48, sweetness: 22, fruit: 48, oak: 10, finish: 55 },
+    Dessert:   { body: 55, tannins: 12, acidity: 45, alcohol: 40, sweetness: 90, fruit: 75, oak: 20, finish: 65 },
+  }
+  const fpData   = fp ?? { id: '', wine_id: '', ...DEFAULT_FP[b.wine_type] ?? DEFAULT_FP['Red'] }
+  const fpIsReal = !!fp
 
   const purchaseTotal = (b.purchase_price ?? 0) * b.quantity
   const marketTotal   = (b.market_price   ?? 0) * b.quantity
@@ -130,26 +157,27 @@ export default async function WineDetailPage({
         </section>
 
         {/* FLAVOUR PROFILE */}
-        {fp && (
-          <section className="rounded-2xl p-4" style={{ background: '#ecddd4' }}>
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-xs font-bold tracking-widest uppercase"
-                 style={{ color: '#b09080', letterSpacing: '0.15em' }}>
-                Flavour Profile
-              </p>
-              <p className="text-xs" style={{ color: '#c4a090' }}>Source: Wine database</p>
-            </div>
+        <section className="rounded-2xl p-4" style={{ background: '#ecddd4' }}>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-xs font-bold tracking-widest uppercase"
+               style={{ color: '#b09080', letterSpacing: '0.15em' }}>
+              Flavour Profile
+            </p>
+            <p className="text-xs" style={{ color: '#c4a090' }}>
+              {fpIsReal ? 'Source: Wine database' : `Typical ${b.wine_type}`}
+            </p>
+          </div>
 
             <div className="space-y-3">
               {([
-                ['Body',      fp.body],
-                ['Tannins',   fp.tannins],
-                ['Acidity',   fp.acidity],
-                ['Alcohol',   fp.alcohol],
-                ['Sweetness', fp.sweetness],
-                ['Fruit',     fp.fruit],
-                ['Oak',       fp.oak],
-                ['Finish',    fp.finish],
+                ['Body',      fpData.body],
+                ['Tannins',   fpData.tannins],
+                ['Acidity',   fpData.acidity],
+                ['Alcohol',   fpData.alcohol],
+                ['Sweetness', fpData.sweetness],
+                ['Fruit',     fpData.fruit],
+                ['Oak',       fpData.oak],
+                ['Finish',    fpData.finish],
               ] as [string, number][]).map(([label, val]) => (
                 <div key={label} className="flex items-center gap-3">
                   <span className="w-16 shrink-0 text-xs" style={{ color: '#7a4a38' }}>{label}</span>
@@ -174,26 +202,19 @@ export default async function WineDetailPage({
             </div>
 
             <p className="text-xs mt-4 leading-relaxed" style={{ color: '#b09080' }}>
-              Pre-filled from critic and producer data. Reflects the typical expression of this wine and vintage.
+              {fpIsReal
+                ? 'Pre-filled from critic and producer data. Reflects the typical expression of this wine and vintage.'
+                : `Estimated typical profile for a ${b.wine_type} wine. Scan the label to get personalised data.`}
             </p>
           </section>
-        )}
 
         {/* DRINKING WINDOW */}
-        {hasWindow ? (
-          <DrinkingWindowChart
-            drinkFrom={b.drink_from!}
-            peak={b.peak!}
-            drinkTo={b.drink_to!}
-          />
-        ) : (
-          <div className="rounded-2xl p-4 text-center" style={{ background: '#ecddd4' }}>
-            <p className="text-sm" style={{ color: '#a07060' }}>No drinking window set</p>
-            <p className="text-xs mt-1" style={{ color: '#c4a090' }}>
-              Scan the label to get an AI estimate.
-            </p>
-          </div>
-        )}
+        <DrinkingWindowChart
+          drinkFrom={drinkWindow.drinkFrom}
+          peak={drinkWindow.peak}
+          drinkTo={drinkWindow.drinkTo}
+          estimated={!hasWindow}
+        />
 
         {/* CELLAR COUNT */}
         <div className="rounded-2xl p-4 flex items-center gap-3" style={{ background: '#ecddd4' }}>
