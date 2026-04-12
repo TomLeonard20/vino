@@ -40,8 +40,9 @@ export default async function CellarPage({
     const s = drinkingStatus(b)
     return s === 'Drink now' || s === 'At peak' || s === 'Open soon'
   }).length
+  // Use purchase_price first, fall back to market_price (populated from catalogue)
   const estValue = allBottles.reduce((s, b) =>
-    s + (b.purchase_price ?? 0) * b.quantity, 0)
+    s + ((b.purchase_price ?? b.market_price ?? 0) * b.quantity), 0)
 
   const activeFilter = filterType ?? 'All'
 
@@ -144,11 +145,11 @@ function BottleRow({ bottle }: { bottle: CellarBottle }) {
             {wine?.name ?? 'Unknown wine'}
           </p>
           <p className="text-xs mt-0.5" style={{ color: '#a07060' }}>
-            {[wine?.grapes?.[0], wine?.region, wine?.vintage].filter(Boolean).join(' · ')}
+            {[wine?.grapes?.[0], wine?.appellation || wine?.region, wine?.vintage].filter(Boolean).join(' · ')}
           </p>
-          {bottle.purchase_price && (
+          {(bottle.purchase_price ?? bottle.market_price) && (
             <p className="text-xs" style={{ color: '#c4a090' }}>
-              {CURRENCY_SYMBOLS[bottle.purchase_currency]}{bottle.purchase_price}
+              A${bottle.purchase_price ?? bottle.market_price}
             </p>
           )}
         </div>

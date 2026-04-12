@@ -18,6 +18,7 @@ interface ScannedWine {
   name: string
   producer: string
   region: string
+  country: string
   vintage: number | null
   grapes: string[]
   criticScore: number | null
@@ -318,6 +319,7 @@ function WineConfirmSheet({
         name:         wine.name,
         producer:     wine.producer,
         region:       wine.region,
+        appellation:  wine.country,
         vintage:      wine.vintage,
         grapes:       wine.grapes,
         critic_score: wine.criticScore,
@@ -334,13 +336,15 @@ function WineConfirmSheet({
 
     if (action === 'cellar' || action === 'both') {
       await supabase.from('cellar_bottles').insert({
-        user_id:   user.id,
-        wine_id:   wineRow.id,
-        wine_type: wineType,
-        quantity:  1,
-        drink_from: wine.drinkFrom,
-        peak:       wine.peak,
-        drink_to:   wine.drinkTo,
+        user_id:        user.id,
+        wine_id:        wineRow.id,
+        wine_type:      wineType,
+        quantity:       1,
+        drink_from:     wine.drinkFrom,
+        peak:           wine.peak,
+        drink_to:       wine.drinkTo,
+        market_price:   wine.price_aud,
+        market_currency: 'AUD',
       })
     }
 

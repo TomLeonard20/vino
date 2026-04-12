@@ -8,6 +8,7 @@ export interface LabelScanResult {
   name:        string
   producer:    string
   region:      string
+  country:     string   // stored in wines.appellation
   vintage:     number | null
   grapes:      string[]
   wineType:    'Red' | 'White' | 'Rosé' | 'Champagne' | 'Sparkling' | 'Dessert'
@@ -39,10 +40,11 @@ async function enrichFromCatalogue(name: string, producer: string, vintage: numb
 
     if (!data) return null
     return {
-      criticScore: data.points ?? null,
+      criticScore: data.points   ?? null,
       price_aud:   data.price_usd ? Math.round(data.price_usd * USD_TO_AUD) : null,
-      grapes:      data.variety ? [data.variety] : [],
-      region:      data.region  ?? '',
+      grapes:      data.variety  ? [data.variety] : [],
+      region:      data.region   ?? '',
+      country:     data.country  ?? '',
       description: data.description ?? '',
     }
   } catch {
@@ -132,6 +134,7 @@ Rules:
         name,
         producer,
         region:      enriched?.region      || parsed.region   || '',
+        country:     enriched?.country     || '',
         vintage,
         grapes:      enriched?.grapes?.length ? enriched.grapes : (Array.isArray(parsed.grapes) ? parsed.grapes : []),
         wineType:    parsed.wineType || 'Red',

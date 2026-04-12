@@ -63,6 +63,7 @@ export default async function WineDetailPage({
               b.wine_type,
               wine.vintage?.toString(),
               ...(wine.grapes ?? []),
+              wine.appellation || null,   // country stored here
             ].filter(Boolean).map(tag => (
               <span key={tag}
                     className="text-xs px-2.5 py-1 rounded-full font-medium"
@@ -72,10 +73,10 @@ export default async function WineDetailPage({
             ))}
           </div>
 
-          {/* Region / country row */}
-          {wine.region && (
+          {/* Region row (appellation/region, not city) */}
+          {(wine.appellation || wine.region) && (
             <p className="text-xs" style={{ color: '#a07060' }}>
-              📍 {wine.region}
+              📍 {[wine.region, wine.appellation].filter(Boolean).join(', ')}
             </p>
           )}
 

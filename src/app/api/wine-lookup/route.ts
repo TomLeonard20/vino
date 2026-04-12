@@ -7,6 +7,7 @@ export interface WineLookupResult {
   name:        string
   producer:    string
   region:      string
+  country:     string
   vintage:     number | null
   grapes:      string[]
   criticScore: number | null
@@ -37,6 +38,7 @@ async function tryOpenFoodFacts(barcode: string): Promise<WineLookupResult | nul
       name,
       producer:    p.brands ?? '',
       region:      p.origins ?? p.manufacturing_places ?? '',
+      country:     p.countries_tags?.[0]?.replace('en:', '') ?? '',
       vintage:     extractVintage(name),
       grapes:      [],
       criticScore: null,
@@ -64,6 +66,7 @@ async function tryUpcItemDb(barcode: string): Promise<WineLookupResult | null> {
       name:        item.title,
       producer:    item.brand ?? '',
       region:      '',
+      country:     '',
       vintage:     extractVintage(item.title ?? ''),
       grapes:      [],
       criticScore: null,
@@ -90,6 +93,7 @@ async function tryOpenBeautyFacts(barcode: string): Promise<WineLookupResult | n
       name:        p.product_name,
       producer:    p.brands ?? '',
       region:      p.origins ?? '',
+      country:     '',
       vintage:     extractVintage(p.product_name ?? ''),
       grapes:      [],
       criticScore: null,
@@ -110,7 +114,7 @@ async function enrichFromCatalogue(name: string, producer: string, vintage: numb
 
     const { data } = await supabase
       .from('wine_catalogue')
-      .select('points,price_usd,variety,region,description')
+      .select('points,price_usd,variety,country,region,description')
       .textSearch('search_vector', q.split(/\s+/).filter(w => w.length > 1).map(w => `${w}:*`).join(' & '), { type: 'websearch' })
       .order('points', { ascending: false, nullsFirst: false })
       .limit(1)
@@ -118,10 +122,11 @@ async function enrichFromCatalogue(name: string, producer: string, vintage: numb
 
     if (!data) return null
     return {
-      criticScore: data.points ?? null,
+      criticScore: data.points  ?? null,
       price_aud:   data.price_usd ? Math.round(data.price_usd * USD_TO_AUD) : null,
       grapes:      data.variety ? [data.variety] : [],
       region:      data.region  ?? '',
+      country:     data.country ?? '',
     }
   } catch {
     return null
@@ -147,10 +152,11 @@ export async function GET(req: NextRequest) {
     found: true,
     wine: {
       ...base,
-      grapes:      enriched?.grapes?.length      ? enriched.grapes      : base.grapes,
-      criticScore: enriched?.criticScore         ?? base.criticScore,
-      price_aud:   enriched?.price_aud           ?? base.price_aud,
-      region:      enriched?.region || base.region,
+      grapes:      enriched?.grapes?.length ? enriched.grapes      : base.grapes,
+      criticScore: enriched?.criticScore    ?? base.criticScore,
+      price_aud:   enriched?.price_aud      ?? base.price_aud,
+      region:      enriched?.region         || base.region,
+      country:     enriched?.country        || base.country,
     },
   })
 }
