@@ -18,7 +18,10 @@
       "Bash(git init:*)",
       "Bash(git add:*)",
       "Bash(git rm:*)",
-      "Bash(git commit -m 'Initial commit — Vino web app Phase 1 MVP:*)"
+      "Bash(git commit -m 'Initial commit — Vino web app Phase 1 MVP:*)",
+      "Bash(git remote:*)",
+      "Bash(git push:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
