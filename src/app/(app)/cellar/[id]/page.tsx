@@ -1,12 +1,26 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
-import { drinkingStatus, WINE_TYPE_COLOURS, CURRENCY_SYMBOLS } from '@/types/database'
-import type { CellarBottle, TastingNote } from '@/types/database'
-import ScoreBadge from '@/components/ui/ScoreBadge'
-import WindowStatusPill from '@/components/ui/WindowStatusPill'
-import WineTypeBar from '@/components/ui/WineTypeBar'
+import { drinkingStatus, WINE_TYPE_COLOURS } from '@/types/database'
+import type { CellarBottle, TastingNote, FlavourProfile } from '@/types/database'
 import DrinkingWindowChart from '@/components/ui/DrinkingWindowChart'
 import Link from 'next/link'
+
+// ── Flavour label descriptors ─────────────────────────────────
+function flavourLabel(key: string, val: number): string {
+  const map: Record<string, string[]> = {
+    Body:      ['Very light', 'Light', 'Med–', 'Med', 'Med+', 'Full', 'Full'],
+    Tannins:   ['None', 'Low', 'Med–', 'Med', 'Med+', 'High', 'Very high'],
+    Acidity:   ['Flat', 'Low', 'Med–', 'Med', 'Med+', 'High', 'Very high'],
+    Alcohol:   ['Low', 'Low', 'Med–', 'Med', 'Med+', 'High', 'Very high'],
+    Sweetness: ['Dry', 'Dry', 'Off-dry', 'Medium', 'Medium', 'Sweet', 'V.Sweet'],
+    Fruit:     ['Subtle', 'Light', 'Med', 'Med', 'Dark', 'Dark', 'Intense'],
+    Oak:       ['None', 'Low', 'Low', 'Medium', 'Medium', 'High', 'Very high'],
+    Finish:    ['Short', 'Short', 'Med–', 'Med', 'Med+', 'Long', 'Very long'],
+  }
+  const labels = map[key] ?? ['Low','','','','','','High']
+  const idx    = Math.min(Math.floor((val / 100) * labels.length), labels.length - 1)
+  return labels[idx]
+}
 
 export default async function WineDetailPage({
   params,
@@ -24,192 +38,303 @@ export default async function WineDetailPage({
 
   if (!bottle) notFound()
 
-  const b    = bottle as CellarBottle
-  const wine = b.wine!
-  const notes = (wine.tasting_notes ?? []) as TastingNote[]
-  const status = drinkingStatus(b)
+  const b      = bottle as CellarBottle
+  const wine   = b.wine!
+  const notes  = (wine.tasting_notes ?? []) as TastingNote[]
+  const fp     = wine.flavour_profile as FlavourProfile | null
   const typeColor = WINE_TYPE_COLOURS[b.wine_type]
   const hasWindow = b.drink_from && b.drink_to && b.peak
 
-  return (
-    <div className="space-y-4 pb-6">
+  // Value change calc
+  const purchaseTotal = (b.purchase_price ?? 0) * b.quantity
+  const marketTotal   = (b.market_price   ?? 0) * b.quantity
+  const valueChange   = purchaseTotal && marketTotal ? marketTotal - purchaseTotal : null
+  const valuePct      = purchaseTotal && valueChange != null
+    ? Math.round((valueChange / purchaseTotal) * 100)
+    : null
 
-      {/* ── Back link ── */}
-      <Link href="/cellar" className="flex items-center gap-1 text-sm"
-            style={{ color: '#8b2035' }}>
-        ← Back to cellar
-      </Link>
+  const addedDate = new Date(b.added_at).toLocaleDateString('en-AU', { month: 'short', year: 'numeric' })
+  const purchaseDate = b.purchase_date
+    ? new Date(b.purchase_date).toLocaleDateString('en-AU', { month: 'short', year: 'numeric' })
+    : addedDate
+
+  return (
+    <div className="pb-8" style={{ background: '#f0e6de', minHeight: '100vh' }}>
+
+      {/* ── Back nav ── */}
+      <div className="flex items-center justify-between px-1 pt-1 pb-3">
+        <Link href="/cellar" className="flex items-center gap-1 text-sm font-medium"
+              style={{ color: '#8b2035' }}>
+          ‹ Cellar
+        </Link>
+      </div>
 
       {/* ── Hero card ── */}
-      <div className="rounded-2xl overflow-hidden">
-        {/* Colour bar top */}
-        <div className="h-2" style={{ background: typeColor }} />
-        <div className="p-4 space-y-3" style={{ background: '#ecddd4' }}>
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex-1 min-w-0">
-              <h1 className="font-bold text-lg leading-tight" style={{ color: '#3a1a20' }}>
-                {wine.name}
-              </h1>
-              {wine.producer && (
-                <p className="text-sm mt-0.5" style={{ color: '#a07060' }}>{wine.producer}</p>
-              )}
+      <div className="rounded-2xl p-5 mb-5" style={{ background: '#8b2035' }}>
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <h1 className="text-xl font-bold leading-snug text-white flex-1">{wine.name}</h1>
+          {wine.critic_score && (
+            <div className="text-right shrink-0">
+              <p className="text-4xl font-bold leading-none" style={{ color: '#e8c96e' }}>
+                {wine.critic_score}
+              </p>
+              <p className="text-xs uppercase tracking-wider mt-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                Critic<br />Score
+              </p>
             </div>
-            <ScoreBadge score={wine.critic_score ?? null} />
-          </div>
-
-          {/* Tags: wine type · vintage · grapes · country */}
-          <div className="flex flex-wrap gap-1.5">
-            {[
-              b.wine_type,
-              wine.vintage?.toString(),
-              ...(wine.grapes ?? []),
-              wine.appellation || null,   // country stored here
-            ].filter(Boolean).map(tag => (
-              <span key={tag}
-                    className="text-xs px-2.5 py-1 rounded-full font-medium"
-                    style={{ background: '#f5ede6', color: '#7a4530' }}>
-                {tag}
-              </span>
-            ))}
-          </div>
-
-          {/* Region row (appellation/region, not city) */}
-          {(wine.appellation || wine.region) && (
-            <p className="text-xs" style={{ color: '#a07060' }}>
-              📍 {[wine.region, wine.appellation].filter(Boolean).join(', ')}
-            </p>
           )}
+        </div>
 
-          {/* Quantity + status row */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl font-bold" style={{ color: '#3a1a20' }}>×{b.quantity}</span>
-              <span className="text-sm" style={{ color: '#a07060' }}>
-                bottle{b.quantity !== 1 ? 's' : ''} in cellar
-              </span>
-            </div>
-            <WindowStatusPill status={status} />
-          </div>
-
-          {/* Purchase info */}
-          {b.purchase_price && (
-            <p className="text-xs" style={{ color: '#c4a090' }}>
-              Purchased {b.purchase_date ? new Date(b.purchase_date).getFullYear() : ''} ·{' '}
-              {CURRENCY_SYMBOLS[b.purchase_currency]}{b.purchase_price} per bottle
-            </p>
-          )}
+        {/* Tags */}
+        <div className="flex flex-wrap gap-2">
+          {[
+            ...(wine.grapes ?? []),
+            wine.region || null,
+            wine.appellation || null,
+            wine.vintage?.toString() || null,
+          ].filter(Boolean).map(tag => (
+            <span key={tag}
+                  className="text-xs font-medium px-3 py-1 rounded-full"
+                  style={{ background: 'rgba(0,0,0,0.25)', color: 'rgba(255,255,255,0.85)' }}>
+              {tag}
+            </span>
+          ))}
         </div>
       </div>
 
-      {/* ── Drinking window ── */}
-      <div className="rounded-2xl p-4 space-y-3" style={{ background: '#ecddd4' }}>
-        <h2 className="font-semibold text-sm" style={{ color: '#3a1a20' }}>Drinking window</h2>
-        {hasWindow ? (
-          <>
-            <DrinkingWindowChart
-              drinkFrom={b.drink_from!}
-              peak={b.peak!}
-              drinkTo={b.drink_to!}
+      {/* ── Wine details grid ── */}
+      <div className="mb-4">
+        <p className="text-xs font-bold tracking-widest uppercase mb-2 px-0.5"
+           style={{ color: '#a07060', letterSpacing: '0.12em' }}>
+          Wine Details
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          {/* Producer */}
+          {wine.producer && (
+            <DetailCell label="Producer" value={wine.producer} />
+          )}
+          {/* Appellation */}
+          {wine.region && (
+            <DetailCell label="Appellation" value={wine.region} />
+          )}
+          {/* Purchase price */}
+          {b.purchase_price && (
+            <DetailCell label="Purchase price" value={`A$${b.purchase_price}`} />
+          )}
+          {/* Market price */}
+          {b.market_price && (
+            <DetailCell label="Market price" value={`A$${b.market_price}`} />
+          )}
+          {/* Added */}
+          <DetailCell label="Added" value={purchaseDate} large />
+          {/* Value change */}
+          {valueChange !== null && valuePct !== null && (
+            <DetailCell
+              label="Value change"
+              value={`${valueChange >= 0 ? '+' : ''}A$${Math.abs(valueChange)} (${valuePct >= 0 ? '+' : ''}${valuePct}%)`}
+              valueColor={valueChange >= 0 ? '#2e7d32' : '#c62828'}
+              large
             />
-            <div className="flex gap-3 pt-1">
-              {[
-                { label: 'Opens',  value: b.drink_from },
-                { label: 'Peak',   value: b.peak       },
-                { label: 'Closes', value: b.drink_to   },
-              ].map(({ label, value }) => (
-                <div key={label} className="flex-1 text-center rounded-xl py-2.5"
-                     style={{ background: '#f5ede6' }}>
-                  <p className="text-xs" style={{ color: '#a07060' }}>{label}</p>
-                  <p className="text-base font-bold mt-0.5" style={{ color: '#3a1a20' }}>{value}</p>
-                </div>
-              ))}
-            </div>
-          </>
-        ) : (
-          <div className="text-center py-4 space-y-2">
-            <p className="text-sm" style={{ color: '#a07060' }}>No drinking window set for this bottle.</p>
-            <p className="text-xs" style={{ color: '#c4a090' }}>
-              Add a bottle via the scanner to get an AI drinking window estimate.
-            </p>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* ── Flavour profile ── */}
-      {wine.flavour_profile && (
-        <div className="rounded-2xl p-4 space-y-3" style={{ background: '#ecddd4' }}>
-          <h2 className="font-semibold text-sm" style={{ color: '#3a1a20' }}>Flavour profile</h2>
-          <div className="space-y-2">
+      {fp && (
+        <div className="rounded-2xl p-4 mb-4" style={{ background: '#ecddd4' }}>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-bold tracking-widest uppercase"
+               style={{ color: '#a07060', letterSpacing: '0.12em' }}>
+              Flavour Profile
+            </p>
+            <p className="text-xs" style={{ color: '#c4a090' }}>Source: Wine database</p>
+          </div>
+
+          <div className="space-y-2.5">
             {(
               [
-                ['Body',     wine.flavour_profile.body],
-                ['Tannins',  wine.flavour_profile.tannins],
-                ['Acidity',  wine.flavour_profile.acidity],
-                ['Fruit',    wine.flavour_profile.fruit],
-                ['Oak',      wine.flavour_profile.oak],
-                ['Finish',   wine.flavour_profile.finish],
+                ['Body',      fp.body],
+                ['Tannins',   fp.tannins],
+                ['Acidity',   fp.acidity],
+                ['Alcohol',   fp.alcohol],
+                ['Sweetness', fp.sweetness],
+                ['Fruit',     fp.fruit],
+                ['Oak',       fp.oak],
+                ['Finish',    fp.finish],
               ] as [string, number][]
             ).map(([label, val]) => (
-              <div key={label} className="flex items-center gap-3">
-                <span className="text-xs w-14 shrink-0" style={{ color: '#a07060' }}>{label}</span>
-                <div className="flex-1 h-1.5 rounded-full overflow-hidden"
-                     style={{ background: 'rgba(0,0,0,0.08)' }}>
-                  <div className="h-full rounded-full"
-                       style={{ width: `${val}%`, background: typeColor }} />
+              <div key={label} className="flex items-center gap-2">
+                <span className="text-xs w-16 shrink-0" style={{ color: '#7a4a38' }}>{label}</span>
+                {/* Track */}
+                <div className="flex-1 relative h-1.5 rounded-full"
+                     style={{ background: '#d4b8aa' }}>
+                  {/* Fill */}
+                  <div className="absolute inset-y-0 left-0 rounded-full"
+                       style={{ width: `${val}%`, background: '#8b2035' }} />
+                  {/* Dot */}
+                  <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 border-white shadow"
+                       style={{ left: `calc(${val}% - 6px)`, background: '#8b2035' }} />
                 </div>
-                <span className="text-xs w-6 text-right" style={{ color: '#a07060' }}>{val}</span>
+                <span className="text-xs w-14 text-right shrink-0 font-medium"
+                      style={{ color: '#7a4a38' }}>
+                  {flavourLabel(label, val)}
+                </span>
               </div>
             ))}
           </div>
+
+          {/* Axis labels */}
+          <div className="flex justify-between mt-3">
+            {['Low', 'Medium', 'High'].map(l => (
+              <span key={l} className="text-xs" style={{ color: '#c4a090' }}>{l}</span>
+            ))}
+          </div>
+
+          <p className="text-xs mt-3 leading-relaxed" style={{ color: '#b09080' }}>
+            Pre-filled from critic and producer data. Reflects the typical expression of this wine and vintage.
+          </p>
         </div>
       )}
 
-      {/* ── Tasting notes ── */}
-      <div className="rounded-2xl p-4 space-y-3" style={{ background: '#ecddd4' }}>
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-sm" style={{ color: '#3a1a20' }}>
-            Tasting notes
-            {notes.length > 0 && (
-              <span className="ml-2 text-xs font-normal" style={{ color: '#a07060' }}>
-                {notes.length}
-              </span>
-            )}
-          </h2>
+      {/* ── Drinking window ── */}
+      {hasWindow ? (
+        <div className="mb-4">
+          <DrinkingWindowChart
+            drinkFrom={b.drink_from!}
+            peak={b.peak!}
+            drinkTo={b.drink_to!}
+          />
         </div>
-        {notes.length === 0 ? (
-          <p className="text-sm text-center py-3" style={{ color: '#c4a090' }}>
-            No tasting notes yet.
+      ) : (
+        <div className="rounded-2xl p-4 mb-4 text-center" style={{ background: '#ecddd4' }}>
+          <p className="text-sm" style={{ color: '#a07060' }}>No drinking window set</p>
+          <p className="text-xs mt-1" style={{ color: '#c4a090' }}>
+            Scan the label to get an AI drinking window estimate.
           </p>
+        </div>
+      )}
+
+      {/* ── Cellar count + actions ── */}
+      <div className="rounded-2xl p-4 mb-4 flex items-center gap-4" style={{ background: '#ecddd4' }}>
+        {/* Count badge */}
+        <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 text-white text-xl font-bold"
+             style={{ background: '#8b2035' }}>
+          {b.quantity}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-sm" style={{ color: '#3a1a20' }}>
+            {b.quantity} bottle{b.quantity !== 1 ? 's' : ''} in cellar
+          </p>
+          {(b.purchase_price || b.market_price) && (
+            <p className="text-xs mt-0.5" style={{ color: '#a07060' }}>
+              {purchaseDate} · A${b.purchase_price ?? b.market_price} ea.
+            </p>
+          )}
+        </div>
+        <div className="flex gap-2 shrink-0">
+          <button className="px-4 py-2 rounded-xl text-sm font-semibold border"
+                  style={{ borderColor: '#3a1a20', color: '#3a1a20', background: 'transparent' }}>
+            Drink ↗
+          </button>
+          <button className="px-4 py-2 rounded-xl text-sm font-semibold border"
+                  style={{ borderColor: '#3a1a20', color: '#3a1a20', background: 'transparent' }}>
+            + Add
+          </button>
+        </div>
+      </div>
+
+      {/* ── Tasting notes ── */}
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2 px-0.5">
+          <p className="text-xs font-bold tracking-widest uppercase"
+             style={{ color: '#a07060', letterSpacing: '0.12em' }}>
+            My Tasting Notes
+          </p>
+          {notes.length > 1 && (
+            <button className="text-xs font-medium" style={{ color: '#8b2035' }}>
+              See all
+            </button>
+          )}
+        </div>
+
+        {notes.length === 0 ? (
+          <div className="rounded-2xl p-4 text-center" style={{ background: '#ecddd4' }}>
+            <p className="text-sm" style={{ color: '#c4a090' }}>No tasting notes yet.</p>
+          </div>
         ) : (
-          notes.map(note => (
-            <div key={note.id} className="rounded-xl p-3 space-y-1"
-                 style={{ background: '#f5ede6' }}>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs" style={{ color: '#a07060' }}>
-                  {new Date(note.tasted_at).toLocaleDateString('en-AU', {
-                    day: 'numeric', month: 'short', year: 'numeric',
-                  })}
-                </span>
-                {note.score && (
-                  <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white"
-                        style={{ background: '#8b2035' }}>
-                    {note.score}
-                  </span>
-                )}
-              </div>
-              {note.free_text && (
-                <p className="text-sm" style={{ color: '#3a1a20' }}>{note.free_text}</p>
-              )}
-            </div>
-          ))
+          <div className="space-y-3">
+            {notes.slice(0, 2).map(note => (
+              <TastingNoteCard key={note.id} note={note} />
+            ))}
+          </div>
         )}
       </div>
 
-      {/* ── Source ── */}
-      {wine.db_source && (
-        <p className="text-xs text-center" style={{ color: '#d4b8aa' }}>
-          Data source: {wine.db_source}
-        </p>
+      {/* Add tasting note input placeholder */}
+      <div className="rounded-2xl h-12" style={{ background: '#ecddd4' }} />
+    </div>
+  )
+}
+
+// ── Sub-components ─────────────────────────────────────────────
+
+function DetailCell({
+  label, value, valueColor, large,
+}: {
+  label: string
+  value: string
+  valueColor?: string
+  large?: boolean
+}) {
+  return (
+    <div className="rounded-xl p-3" style={{ background: '#ecddd4' }}>
+      <p className="text-xs mb-1" style={{ color: '#a07060' }}>{label}</p>
+      <p className={`font-semibold leading-tight ${large ? 'text-lg' : 'text-sm'}`}
+         style={{ color: valueColor ?? '#3a1a20' }}>
+        {value}
+      </p>
+    </div>
+  )
+}
+
+function TastingNoteCard({ note }: { note: TastingNote }) {
+  const date = new Date(note.tasted_at).toLocaleDateString('en-AU', {
+    day: 'numeric', month: 'short', year: 'numeric',
+  })
+  const tags = [...(note.nose_tags ?? []), ...(note.palate_tags ?? [])]
+
+  return (
+    <div className="rounded-2xl p-4 space-y-2" style={{ background: '#ecddd4' }}>
+      {/* Score + date */}
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <span className="text-sm font-bold" style={{ color: '#3a1a20' }}>
+            {note.score} pts ·
+          </span>
+          {/* Stars */}
+          <span className="ml-1 text-sm" style={{ color: '#8b2035' }}>
+            {'★'.repeat(note.stars)}{'☆'.repeat(5 - note.stars)}
+          </span>
+        </div>
+        <span className="text-xs shrink-0" style={{ color: '#a07060' }}>{date}</span>
+      </div>
+
+      {/* Note text */}
+      {note.free_text && (
+        <p className="text-sm leading-relaxed" style={{ color: '#3a1a20' }}>{note.free_text}</p>
+      )}
+
+      {/* Tags */}
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 pt-1">
+          {tags.map(tag => (
+            <span key={tag}
+                  className="text-xs px-2.5 py-1 rounded-full border"
+                  style={{ borderColor: '#c4a090', color: '#7a4a38', background: 'transparent' }}>
+              {tag}
+            </span>
+          ))}
+        </div>
       )}
     </div>
   )
