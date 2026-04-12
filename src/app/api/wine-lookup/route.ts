@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+
+const USD_TO_AUD = 1.58
 
 export interface WineLookupResult {
-  name: string
-  producer: string
-  region: string
-  vintage: number | null
-  grapes: string[]
-  criticScore: null
-  source: string
+  name:        string
+  producer:    string
+  region:      string
+  vintage:     number | null
+  grapes:      string[]
+  criticScore: number | null
+  price_aud:   number | null
+  source:      string
 }
 
-// Extract a 4-digit vintage year from a string
 function extractVintage(text: string): number | null {
   const m = text.match(/\b(19|20)\d{2}\b/)
   return m ? parseInt(m[0]) : null
@@ -26,25 +29,26 @@ async function tryOpenFoodFacts(barcode: string): Promise<WineLookupResult | nul
     const data = await res.json()
     if (data.status !== 1 || !data.product) return null
 
-    const p = data.product
+    const p    = data.product
     const name = p.product_name ?? p.abbreviated_product_name ?? ''
     if (!name) return null
 
     return {
       name,
-      producer: p.brands ?? '',
-      region:   p.origins ?? p.manufacturing_places ?? '',
-      vintage:  extractVintage(name),
-      grapes:   [],
+      producer:    p.brands ?? '',
+      region:      p.origins ?? p.manufacturing_places ?? '',
+      vintage:     extractVintage(name),
+      grapes:      [],
       criticScore: null,
-      source: 'Open Food Facts',
+      price_aud:   null,
+      source:      'Open Food Facts',
     }
   } catch {
     return null
   }
 }
 
-// ── Source 2: UPC Item DB (free, 100 req/day, no key) ─────────
+// ── Source 2: UPC Item DB (free, 100 req/day) ─────────────────
 async function tryUpcItemDb(barcode: string): Promise<WineLookupResult | null> {
   try {
     const res  = await fetch(
@@ -53,25 +57,25 @@ async function tryUpcItemDb(barcode: string): Promise<WineLookupResult | null> {
     )
     if (!res.ok) return null
     const data = await res.json()
-
     const item = data.items?.[0]
     if (!item?.title) return null
 
     return {
-      name:     item.title,
-      producer: item.brand ?? '',
-      region:   '',
-      vintage:  extractVintage(item.title ?? ''),
-      grapes:   [],
+      name:        item.title,
+      producer:    item.brand ?? '',
+      region:      '',
+      vintage:     extractVintage(item.title ?? ''),
+      grapes:      [],
       criticScore: null,
-      source: 'UPC Item DB',
+      price_aud:   null,
+      source:      'UPC Item DB',
     }
   } catch {
     return null
   }
 }
 
-// ── Source 3: Open Beauty Facts (sometimes has wine) ─────────
+// ── Source 3: Open Beauty Facts ───────────────────────────────
 async function tryOpenBeautyFacts(barcode: string): Promise<WineLookupResult | null> {
   try {
     const res  = await fetch(
@@ -83,13 +87,41 @@ async function tryOpenBeautyFacts(barcode: string): Promise<WineLookupResult | n
 
     const p = data.product
     return {
-      name:     p.product_name,
-      producer: p.brands ?? '',
-      region:   p.origins ?? '',
-      vintage:  extractVintage(p.product_name ?? ''),
-      grapes:   [],
+      name:        p.product_name,
+      producer:    p.brands ?? '',
+      region:      p.origins ?? '',
+      vintage:     extractVintage(p.product_name ?? ''),
+      grapes:      [],
       criticScore: null,
-      source: 'Open Product DB',
+      price_aud:   null,
+      source:      'Open Product DB',
+    }
+  } catch {
+    return null
+  }
+}
+
+// ── Source 4: Catalogue enrichment ───────────────────────────
+// Once we have a name from barcodes, look it up in our 130k wine catalogue
+async function enrichFromCatalogue(name: string, producer: string, vintage: number | null): Promise<Partial<WineLookupResult> | null> {
+  try {
+    const supabase = await createClient()
+    const q = [producer, name, vintage?.toString()].filter(Boolean).join(' ')
+
+    const { data } = await supabase
+      .from('wine_catalogue')
+      .select('points,price_usd,variety,region,description')
+      .textSearch('search_vector', q.split(/\s+/).filter(w => w.length > 1).map(w => `${w}:*`).join(' & '), { type: 'websearch' })
+      .order('points', { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (!data) return null
+    return {
+      criticScore: data.points ?? null,
+      price_aud:   data.price_usd ? Math.round(data.price_usd * USD_TO_AUD) : null,
+      grapes:      data.variety ? [data.variety] : [],
+      region:      data.region  ?? '',
     }
   } catch {
     return null
@@ -100,15 +132,25 @@ export async function GET(req: NextRequest) {
   const barcode = req.nextUrl.searchParams.get('barcode')
   if (!barcode) return NextResponse.json({ error: 'Barcode required' }, { status: 400 })
 
-  // Try each source in order, return first hit
-  const result =
+  // Try barcode sources in order
+  const base =
     (await tryOpenFoodFacts(barcode)) ??
-    (await tryUpcItemDb(barcode)) ??
+    (await tryUpcItemDb(barcode))     ??
     (await tryOpenBeautyFacts(barcode))
 
-  if (result) {
-    return NextResponse.json({ found: true, wine: result })
-  }
+  if (!base) return NextResponse.json({ found: false })
 
-  return NextResponse.json({ found: false })
+  // Always try to enrich with catalogue data for price + score
+  const enriched = await enrichFromCatalogue(base.name, base.producer, base.vintage)
+
+  return NextResponse.json({
+    found: true,
+    wine: {
+      ...base,
+      grapes:      enriched?.grapes?.length      ? enriched.grapes      : base.grapes,
+      criticScore: enriched?.criticScore         ?? base.criticScore,
+      price_aud:   enriched?.price_aud           ?? base.price_aud,
+      region:      enriched?.region || base.region,
+    },
+  })
 }

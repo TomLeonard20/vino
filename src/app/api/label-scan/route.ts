@@ -1,21 +1,53 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+
+const USD_TO_AUD = 1.58
 
 export interface LabelScanResult {
-  name: string
-  producer: string
-  region: string
-  vintage: number | null
-  grapes: string[]
-  wineType: 'Red' | 'White' | 'Rosé' | 'Champagne' | 'Sparkling' | 'Dessert'
-  source: 'label_scan'
-  criticScore: null
+  name:        string
+  producer:    string
+  region:      string
+  vintage:     number | null
+  grapes:      string[]
+  wineType:    'Red' | 'White' | 'Rosé' | 'Champagne' | 'Sparkling' | 'Dessert'
+  source:      'label_scan' | 'catalogue'
+  criticScore: number | null
+  price_aud:   number | null
+  description: string
 }
 
 /** Strip markdown code fences that Claude sometimes adds despite instructions */
 function extractJson(raw: string): string {
   const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/)
   return fenced ? fenced[1].trim() : raw.trim()
+}
+
+/** After reading the label, search the catalogue for price/score enrichment */
+async function enrichFromCatalogue(name: string, producer: string, vintage: number | null) {
+  try {
+    const supabase = await createClient()
+    const q = [producer, name, vintage?.toString()].filter(Boolean).join(' ')
+
+    const { data } = await supabase
+      .from('wine_catalogue')
+      .select('points,price_usd,variety,country,region,description')
+      .textSearch('search_vector', q.split(/\s+/).filter(w => w.length > 1).map(w => `${w}:*`).join(' & '), { type: 'websearch' })
+      .order('points', { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (!data) return null
+    return {
+      criticScore: data.points ?? null,
+      price_aud:   data.price_usd ? Math.round(data.price_usd * USD_TO_AUD) : null,
+      grapes:      data.variety ? [data.variety] : [],
+      region:      data.region  ?? '',
+      description: data.description ?? '',
+    }
+  } catch {
+    return null
+  }
 }
 
 export async function POST(request: Request) {
@@ -25,12 +57,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ found: false, error: 'No image provided' }, { status: 400 })
   }
 
-  // Strip the data URL prefix to get raw base64
   const base64Data = image.replace(/^data:image\/\w+;base64,/, '')
 
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey || apiKey.startsWith('sk-ant-REPLACE')) {
-    // Tell the UI clearly that the key isn't configured, rather than returning a fake result
     return NextResponse.json({ found: false, noApiKey: true })
   }
 
@@ -38,7 +68,7 @@ export async function POST(request: Request) {
 
   try {
     const message = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model:      'claude-sonnet-4-20250514',
       max_tokens: 512,
       messages: [
         {
@@ -46,11 +76,7 @@ export async function POST(request: Request) {
           content: [
             {
               type: 'image',
-              source: {
-                type: 'base64',
-                media_type: 'image/jpeg',
-                data: base64Data,
-              },
+              source: { type: 'base64', media_type: 'image/jpeg', data: base64Data },
             },
             {
               type: 'text',
@@ -70,7 +96,7 @@ Rules:
 - vintage must be a number (4-digit year) or null if not visible
 - wineType must be exactly one of: Red, White, Rosé, Champagne, Sparkling, Dessert
 - grapes must be an array of strings (empty array [] if not shown on label)
-- If this is not a wine label or you genuinely cannot read it, set "unreadable": true and leave other fields as empty strings/null
+- If this is not a wine label or you genuinely cannot read it, set "unreadable": true
 - Do NOT wrap in markdown or code blocks — raw JSON only`,
             },
           ],
@@ -93,17 +119,26 @@ Rules:
       return NextResponse.json({ found: false, error: 'Could not read label' })
     }
 
+    const name     = parsed.name     || 'Unknown wine'
+    const producer = parsed.producer || ''
+    const vintage  = parsed.vintage  ?? null
+
+    // Enrich with catalogue data (price, score) — doesn't cost an API call
+    const enriched = await enrichFromCatalogue(name, producer, vintage)
+
     return NextResponse.json({
       found: true,
       wine: {
-        name:        parsed.name     || 'Unknown wine',
-        producer:    parsed.producer || '',
-        region:      parsed.region   || '',
-        vintage:     parsed.vintage  ?? null,
-        grapes:      Array.isArray(parsed.grapes) ? parsed.grapes : [],
+        name,
+        producer,
+        region:      enriched?.region      || parsed.region   || '',
+        vintage,
+        grapes:      enriched?.grapes?.length ? enriched.grapes : (Array.isArray(parsed.grapes) ? parsed.grapes : []),
         wineType:    parsed.wineType || 'Red',
         source:      'label_scan' as const,
-        criticScore: null,
+        criticScore: enriched?.criticScore ?? null,
+        price_aud:   enriched?.price_aud   ?? null,
+        description: enriched?.description ?? '',
       } satisfies LabelScanResult,
     })
   } catch (err) {

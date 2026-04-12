@@ -21,6 +21,7 @@ interface ScannedWine {
   vintage: number | null
   grapes: string[]
   criticScore: number | null
+  price_aud: number | null
   source: string
   drinkFrom?: number
   peak?: number
@@ -383,16 +384,23 @@ function WineConfirmSheet({
               </span>
             ))}
         </div>
-        {wine.drinkFrom && (
-          <div className="mt-1 text-xs text-white/80 flex items-center gap-1">
-            <span>🍷</span>
-            <span>Drink {wine.drinkFrom}–{wine.drinkTo} · Peak {wine.peak}</span>
-            <span className="ml-1 px-1.5 py-0.5 rounded text-white/60"
-                  style={{ background: 'rgba(255,255,255,0.1)' }}>
-              AI estimate
+        <div className="flex items-center gap-3 flex-wrap">
+          {wine.price_aud && (
+            <span className="text-white font-bold text-sm">
+              A${wine.price_aud}
             </span>
-          </div>
-        )}
+          )}
+          {wine.drinkFrom && (
+            <div className="text-xs text-white/80 flex items-center gap-1">
+              <span>🍷</span>
+              <span>Drink {wine.drinkFrom}–{wine.drinkTo} · Peak {wine.peak}</span>
+              <span className="ml-1 px-1.5 py-0.5 rounded text-white/60"
+                    style={{ background: 'rgba(255,255,255,0.1)' }}>
+                AI estimate
+              </span>
+            </div>
+          )}
+        </div>
         {wine.drinkRationale && (
           <p className="text-xs text-white/60 italic">{wine.drinkRationale}</p>
         )}
