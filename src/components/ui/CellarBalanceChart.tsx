@@ -93,13 +93,13 @@ export default function CellarBalanceChart({ bottles }: { bottles: CellarBottle[
         {years.filter(y => y % 2 === 0).map(y => (
           <div key={y} className="absolute text-center"
                style={{ left: pct(y), transform: 'translateX(-50%)', top: 4 }}>
-            <p style={{ color: '#4a2a34', fontSize: 9 }}>{y}</p>
+            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 9 }}>{y}</p>
           </div>
         ))}
         {/* Current year label */}
         <div className="absolute text-center"
              style={{ left: '100%', transform: 'translateX(-100%)', top: 4 }}>
-          <p style={{ color: '#7a4a54', fontSize: 9, fontWeight: 600 }}>{NOW}</p>
+          <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: 9, fontWeight: 600 }}>{NOW}</p>
         </div>
       </div>
 

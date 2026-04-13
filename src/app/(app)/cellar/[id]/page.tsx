@@ -160,6 +160,14 @@ export default async function WineDetailPage({
           </div>
         </section>
 
+        {/* DRINKING WINDOW */}
+        <DrinkingWindowChart
+          drinkFrom={drinkWindow.drinkFrom}
+          peak={drinkWindow.peak}
+          drinkTo={drinkWindow.drinkTo}
+          estimated={!hasWindow}
+        />
+
         {/* FLAVOUR PROFILE */}
         <section className="rounded-2xl p-4" style={{ background: '#ecddd4' }}>
           <div className="flex items-center justify-between mb-4">
@@ -211,14 +219,6 @@ export default async function WineDetailPage({
                 : `Estimated typical profile for a ${b.wine_type} wine. Scan the label to get personalised data.`}
             </p>
           </section>
-
-        {/* DRINKING WINDOW */}
-        <DrinkingWindowChart
-          drinkFrom={drinkWindow.drinkFrom}
-          peak={drinkWindow.peak}
-          drinkTo={drinkWindow.drinkTo}
-          estimated={!hasWindow}
-        />
 
         {/* CELLAR COUNT */}
         <div className="rounded-2xl p-4 flex items-center gap-3" style={{ background: '#ecddd4' }}>

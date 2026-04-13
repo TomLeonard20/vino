@@ -1,6 +1,5 @@
 'use client'
 
-import { useState } from 'react'
 import Link from 'next/link'
 import type { CellarBottle, WineType } from '@/types/database'
 import ScoreBadge from './ScoreBadge'
@@ -35,12 +34,8 @@ function smartPeakLabel(b: CellarBottle): { label: string; color: string } {
     return { label: yrs === 1 ? 'Past window' : `${yrs}y past`, color: '#a07060' }
   }
   if (NOW === peakYear) return { label: 'Peaking now', color: '#8b2035' }
-  if (NOW < peakYear) {
-    const yrs = peakYear - NOW
-    return { label: yrs === 1 ? 'Peaks next yr' : `Peaks ${peakYear}`, color: '#2e7d32' }
-  }
-  const yrs = NOW - peakYear
-  return { label: yrs === 1 ? 'Just peaked' : `Peaked ${peakYear}`, color: '#a07060' }
+  if (NOW < peakYear)   return { label: `Peaks ${peakYear}`, color: '#2e7d32' }
+  return { label: `Peaked ${peakYear}`, color: '#a07060' }
 }
 
 function MiniCell({ label, value }: { label: string; value: string }) {
@@ -53,7 +48,6 @@ function MiniCell({ label, value }: { label: string; value: string }) {
 }
 
 export default function CellarBottleCard({ bottle }: { bottle: CellarBottle }) {
-  const [open, setOpen] = useState(false)
   const wine = bottle.wine as {
     name?: string
     critic_score?: number | null
@@ -63,67 +57,36 @@ export default function CellarBottleCard({ bottle }: { bottle: CellarBottle }) {
     vintage?: number | null
   } | undefined
   const { label, color } = smartPeakLabel(bottle)
-  const price = bottle.purchase_price ?? bottle.market_price
 
   return (
-    <div className="rounded-xl overflow-hidden" style={{ background: '#ecddd4' }}>
+    <Link
+      href={`/cellar/${bottle.id}`}
+      className="rounded-xl overflow-hidden flex items-stretch active:opacity-70 transition-opacity"
+      style={{ background: '#ecddd4' }}
+    >
+      <WineTypeBar type={bottle.wine_type} />
 
-      {/* ── Tap-to-expand button ── */}
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="w-full flex items-stretch text-left active:opacity-70 transition-opacity"
-      >
-        <WineTypeBar type={bottle.wine_type} />
-
-        <div className="flex-1 px-3 py-2.5 min-w-0">
-          {/* Row 1: score + name + qty */}
-          <div className="flex items-center gap-2">
-            <ScoreBadge score={wine?.critic_score ?? null} size="sm" />
-            <p className="flex-1 font-semibold text-sm truncate min-w-0" style={{ color: '#3a1a20' }}>
-              {wine?.name ?? 'Unknown wine'}
-            </p>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <span className="font-bold text-sm" style={{ color: '#3a1a20' }}>×{bottle.quantity}</span>
-              <span className="text-sm" style={{ color: '#c4a090', transform: open ? 'rotate(90deg)' : 'none', display: 'inline-block', transition: 'transform 0.2s' }}>›</span>
-            </div>
-          </div>
-
-          {/* Row 2: vintage + grape mini-cells + status */}
-          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-            {wine?.vintage   && <MiniCell label="Vintage" value={String(wine.vintage)} />}
-            {wine?.grapes?.[0] && <MiniCell label="Grape"   value={wine.grapes[0]} />}
-            <span className="ml-auto text-xs font-medium shrink-0 whitespace-nowrap" style={{ color }}>
-              {label}
-            </span>
-          </div>
+      <div className="flex-1 px-3 py-2.5 min-w-0">
+        {/* Row 1: score + name + qty */}
+        <div className="flex items-center gap-2">
+          <ScoreBadge score={wine?.critic_score ?? null} size="sm" />
+          <p className="flex-1 font-semibold text-sm truncate min-w-0" style={{ color: '#3a1a20' }}>
+            {wine?.name ?? 'Unknown wine'}
+          </p>
+          <span className="font-bold text-sm shrink-0" style={{ color: '#3a1a20' }}>
+            ×{bottle.quantity}
+          </span>
         </div>
-      </button>
 
-      {/* ── Expanded details ── */}
-      {open && (
-        <div className="px-4 pb-3 pt-1 border-t" style={{ borderColor: 'rgba(180,130,110,0.2)', marginLeft: 6 }}>
-          <div className="flex items-center justify-between gap-2">
-            <div className="space-y-0.5">
-              {(wine?.appellation || wine?.region) && (
-                <p className="text-xs" style={{ color: '#a07060' }}>
-                  {wine?.appellation || wine?.region}
-                </p>
-              )}
-              {price != null && (
-                <p className="text-xs" style={{ color: '#c4a090' }}>A${price} ea.</p>
-              )}
-            </div>
-            <Link
-              href={`/cellar/${bottle.id}`}
-              className="text-xs font-semibold shrink-0"
-              style={{ color: '#8b2035' }}
-              onClick={e => e.stopPropagation()}
-            >
-              View details →
-            </Link>
-          </div>
+        {/* Row 2: vintage + grape mini-cells + peak status */}
+        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+          {wine?.vintage    && <MiniCell label="Vintage" value={String(wine.vintage)} />}
+          {wine?.grapes?.[0] && <MiniCell label="Grape"   value={wine.grapes[0]} />}
+          <span className="ml-auto text-xs font-medium shrink-0 whitespace-nowrap" style={{ color }}>
+            {label}
+          </span>
         </div>
-      )}
-    </div>
+      </div>
+    </Link>
   )
 }

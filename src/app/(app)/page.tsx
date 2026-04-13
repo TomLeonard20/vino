@@ -86,6 +86,23 @@ export default async function HomePage() {
         </div>
       )}
 
+      {/* ── Add a bottle ── */}
+      <a
+        href="/scan"
+        className="flex items-center justify-center gap-2 rounded-xl py-4 text-white font-semibold"
+        style={{ background: '#8b2035' }}
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
+          <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
+          <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
+          <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+          <rect x="7" y="7" width="3" height="10"/>
+          <rect x="14" y="7" width="3" height="10"/>
+        </svg>
+        Add a bottle
+      </a>
+
       {/* ── 1. Pair my meal ── */}
       <div className="rounded-xl p-4 space-y-2" style={{ background: '#ecddd4' }}>
         <div className="flex items-center gap-2">
@@ -135,23 +152,6 @@ export default async function HomePage() {
           </button>
         </form>
       </div>
-
-      {/* ── 3. Add a bottle ── */}
-      <a
-        href="/scan"
-        className="flex items-center justify-center gap-2 rounded-xl py-4 text-white font-semibold"
-        style={{ background: '#8b2035' }}
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
-          <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
-          <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
-          <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
-          <rect x="7" y="7" width="3" height="10"/>
-          <rect x="14" y="7" width="3" height="10"/>
-        </svg>
-        Add a bottle
-      </a>
 
       {/* ── Recent notes ── */}
       <div className="space-y-3">

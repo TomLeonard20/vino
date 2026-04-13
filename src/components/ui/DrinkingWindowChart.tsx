@@ -39,18 +39,18 @@ function statusInfo(drinkFrom: number, peak: number, drinkTo: number) {
   }
   if (NOW === peak) return {
     label:    'At peak right now',
-    pill:     'At peak',
-    pillBg:   '#8b2035', pillText: 'white', dot: '#8b2035',
+    pill:     'Peaking now',
+    pillBg:   '#8b2035', pillText: 'white', dot: '#c4405a',
   }
   if (NOW < peak) return {
-    label:    yearsToPeak === 1 ? 'Drink window · peaks next year' : `Drink window · ${yearsToPeak} years to peak`,
-    pill:     'Drink now',
+    label:    yearsToPeak === 1 ? 'Drink window · peaks next year' : `Drink window · peaks ${peak}`,
+    pill:     `Peaks ${peak}`,
     pillBg:   '#1a4d1e', pillText: '#a8e6ab', dot: '#4caf50',
   }
   return {
-    label:    yearsPastPeak === 1 ? 'Drink window · 1 year past peak' : `Drink window · ${yearsPastPeak} years past peak`,
-    pill:     'Drink now',
-    pillBg:   '#1a4d1e', pillText: '#a8e6ab', dot: '#4caf50',
+    label:    yearsPastPeak === 1 ? 'Drink window · 1 year past peak' : `Drink window · peaked ${peak}`,
+    pill:     `Peaked ${peak}`,
+    pillBg:   '#2a1a10', pillText: '#c4a090', dot: '#a07060',
   }
 }
 
@@ -182,7 +182,7 @@ export default function DrinkingWindowChart({ drinkFrom, peak, drinkTo, estimate
             className="absolute text-center"
             style={{ left: pct(y), transform: 'translateX(-50%)', top: 4 }}
           >
-            <p style={{ color: '#4a2a34', fontSize: 9 }}>{y}</p>
+            <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 9 }}>{y}</p>
           </div>
         ))}
       </div>
