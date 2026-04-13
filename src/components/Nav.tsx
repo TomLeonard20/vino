@@ -2,8 +2,6 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
 import { Home, BookOpen, Wine, Utensils, User as UserIcon } from 'lucide-react'
 
@@ -18,14 +16,7 @@ const tabs = [
 export default function Nav({ user }: { user: User }) {
   const pathname = usePathname()
   const router = useRouter()
-  const supabase = createClient()
   const initials = user.email?.slice(0, 2).toUpperCase() ?? 'ME'
-
-  async function signOut() {
-    await supabase.auth.signOut()
-    router.push('/login')
-    router.refresh()
-  }
 
   return (
     <>
@@ -35,14 +26,14 @@ export default function Nav({ user }: { user: User }) {
         <span className="font-serif text-2xl font-semibold" style={{ color: '#8b2035' }}>
           vino
         </span>
-        <button
-          onClick={signOut}
+        <Link
+          href="/profile"
           className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
           style={{ background: '#8b2035' }}
-          title="Sign out"
+          title="Profile"
         >
           {initials}
-        </button>
+        </Link>
       </header>
 
       {/* Bottom tab bar (mobile) / left sidebar on desktop — keeping it simple: bottom bar */}
