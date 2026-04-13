@@ -16,26 +16,18 @@ export async function POST() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Get or create the user's cellar via stored procedure (bypasses RLS)
-  const { data: cellarId, error: rpcErr } = await supabase.rpc('get_or_create_cellar')
-  if (rpcErr || !cellarId) {
-    return NextResponse.json({ error: rpcErr?.message ?? 'Could not get or create cellar' }, { status: 500 })
-  }
-
-  // Generate a unique code (retry on collision, max 3 attempts)
-  let invite = null
+  // Try up to 3 times in case of code collision
   for (let i = 0; i < 3; i++) {
     const code = makeCode()
-    const { data, error } = await supabase
-      .from('cellar_invites')
-      .insert({ cellar_id: cellarId, code, created_by: user.id })
-      .select('code, expires_at')
-      .single()
-
-    if (!error && data) { invite = data; break }
+    const { data, error } = await supabase.rpc('create_cellar_invite', { p_code: code })
+    if (!error && data) {
+      return NextResponse.json({ code: data })
+    }
+    // If it's not a unique violation, bail immediately
+    if (error && !error.message.includes('unique')) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
   }
 
-  if (!invite) return NextResponse.json({ error: 'Failed to create invite' }, { status: 500 })
-
-  return NextResponse.json({ code: invite.code, expiresAt: invite.expires_at })
+  return NextResponse.json({ error: 'Failed to create invite' }, { status: 500 })
 }
