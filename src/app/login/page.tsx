@@ -5,13 +5,14 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [message, setMessage] = useState('')
-  const router = useRouter()
+  const [email,     setEmail]     = useState('')
+  const [password,  setPassword]  = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [mode,      setMode]      = useState<'signin' | 'signup'>('signin')
+  const [loading,   setLoading]   = useState(false)
+  const [error,     setError]     = useState('')
+  const [message,   setMessage]   = useState('')
+  const router  = useRouter()
   const supabase = createClient()
 
   async function handleSubmit(e: React.FormEvent) {
@@ -29,7 +30,13 @@ export default function LoginPage() {
         router.refresh()
       }
     } else {
-      const { error } = await supabase.auth.signUp({ email, password })
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { full_name: firstName.trim() },
+        },
+      })
       if (error) {
         setError(error.message)
       } else {
@@ -38,6 +45,12 @@ export default function LoginPage() {
       }
     }
     setLoading(false)
+  }
+
+  const inputStyle = {
+    background:  'white',
+    borderColor: '#d4b8aa',
+    color:       '#3a1a20',
   }
 
   return (
@@ -59,11 +72,11 @@ export default function LoginPage() {
           {(['signin', 'signup'] as const).map(m => (
             <button
               key={m}
-              onClick={() => setMode(m)}
+              onClick={() => { setMode(m); setError('') }}
               className="flex-1 py-2 text-sm font-medium transition-colors"
               style={{
                 background: mode === m ? '#8b2035' : '#ecddd4',
-                color: mode === m ? 'white' : '#a07060',
+                color:      mode === m ? 'white'   : '#a07060',
               }}
             >
               {m === 'signin' ? 'Sign in' : 'Create account'}
@@ -72,6 +85,25 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+
+          {/* First name — signup only */}
+          {mode === 'signup' && (
+            <div>
+              <label className="block text-sm font-medium mb-1" style={{ color: '#3a1a20' }}>
+                First name
+              </label>
+              <input
+                type="text"
+                required
+                value={firstName}
+                onChange={e => setFirstName(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg text-sm border"
+                style={inputStyle}
+                placeholder="e.g. Tom"
+              />
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium mb-1" style={{ color: '#3a1a20' }}>
               Email
@@ -82,11 +114,7 @@ export default function LoginPage() {
               value={email}
               onChange={e => setEmail(e.target.value)}
               className="w-full px-3 py-2 rounded-lg text-sm border"
-              style={{
-                background: 'white',
-                borderColor: '#d4b8aa',
-                color: '#3a1a20',
-              }}
+              style={inputStyle}
               placeholder="you@example.com"
             />
           </div>
@@ -101,11 +129,7 @@ export default function LoginPage() {
               value={password}
               onChange={e => setPassword(e.target.value)}
               className="w-full px-3 py-2 rounded-lg text-sm border"
-              style={{
-                background: 'white',
-                borderColor: '#d4b8aa',
-                color: '#3a1a20',
-              }}
+              style={inputStyle}
               placeholder="••••••••"
             />
           </div>
