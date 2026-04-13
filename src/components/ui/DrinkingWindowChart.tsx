@@ -55,9 +55,9 @@ function statusInfo(drinkFrom: number, peak: number, drinkTo: number) {
 }
 
 export default function DrinkingWindowChart({ drinkFrom, peak, drinkTo, estimated }: Props) {
-  // Always span from NOW (or earlier if drinkFrom is sooner) to 2050
+  // Always span from NOW (or earlier if drinkFrom is sooner) to 2040
   const axisStart  = Math.min(NOW, drinkFrom - 1)
-  const axisEnd    = 2050
+  const axisEnd    = 2040
   const totalYears = axisEnd - axisStart
   const years      = Array.from({ length: totalYears + 1 }, (_, i) => axisStart + i)
 

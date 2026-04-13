@@ -99,11 +99,11 @@ export default async function HomePage() {
         </form>
       </div>
 
-      {/* ── 2. Find a wine ── */}
+      {/* ── 2. What are you looking for? ── */}
       <div className="rounded-xl p-4 space-y-2" style={{ background: '#ecddd4' }}>
         <div className="flex items-center gap-2">
           <span className="text-base">🔍</span>
-          <h3 className="font-semibold text-sm" style={{ color: '#3a1a20' }}>Find a wine</h3>
+          <h3 className="font-semibold text-sm" style={{ color: '#3a1a20' }}>What are you looking for?</h3>
         </div>
         <p className="text-xs" style={{ color: '#a07060' }}>
           Describe what you&apos;re after and we&apos;ll recommend the best grapes and styles.

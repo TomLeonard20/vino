@@ -43,17 +43,22 @@ export default function PairingClient({ initialMeal }: { initialMeal: string }) 
   const [error,      setError]      = useState('')
   const [showAll,    setShowAll]    = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [history,    setHistory]    = useState<Array<{ meal: string; result: PairingResult; ts: number }>>([])
 
   const supabase = createClient()
   // Track whether we've auto-triggered from the URL param
   const autoFired = useRef(false)
 
-  // Load cellar bottles
+  // Load cellar bottles + pairing history
   useEffect(() => {
     supabase
       .from('cellar_bottles')
       .select('*, wine:wines(*, flavour_profile:flavour_profiles(*))')
       .then(({ data }) => setBottles((data ?? []) as CellarBottle[]))
+    try {
+      const raw = localStorage.getItem('vino-pairing-history')
+      if (raw) setHistory(JSON.parse(raw))
+    } catch {}
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -96,7 +101,17 @@ export default function PairingClient({ initialMeal }: { initialMeal: string }) 
         body: JSON.stringify({ meal: mealText, bottles: snapshots }),
       })
       if (!res.ok) throw new Error(await res.text())
-      setResult(await res.json())
+      const data: PairingResult = await res.json()
+      setResult(data)
+      // Save to history (deduped by meal text, max 5)
+      setHistory(prev => {
+        const updated = [
+          { meal: mealText, result: data, ts: Date.now() },
+          ...prev.filter(h => h.meal.toLowerCase() !== mealText.toLowerCase()),
+        ].slice(0, 5)
+        try { localStorage.setItem('vino-pairing-history', JSON.stringify(updated)) } catch {}
+        return updated
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally {
@@ -169,6 +184,33 @@ export default function PairingClient({ initialMeal }: { initialMeal: string }) 
            style={{ background: '#fff3e0', color: '#7a4e00' }}>
           ✨ Add your Anthropic API key to Vercel to enable real AI pairing.
         </p>
+      )}
+
+      {/* ── Pairing history ── */}
+      {!result && !loading && history.length > 0 && (
+        <section className="space-y-2">
+          <p className="text-xs font-bold tracking-widest uppercase"
+             style={{ color: '#b09080', letterSpacing: '0.15em' }}>
+            Recent pairings
+          </p>
+          {history.map((h, i) => (
+            <button
+              key={i}
+              onClick={() => { setMeal(h.meal); setResult(h.result); setExpandedId(null) }}
+              className="w-full flex items-center justify-between gap-2 px-4 py-3 rounded-xl text-left active:opacity-70 transition-opacity"
+              style={{ background: '#ecddd4' }}
+            >
+              <div className="min-w-0">
+                <p className="font-semibold text-sm truncate" style={{ color: '#3a1a20' }}>{h.meal}</p>
+                <p className="text-xs" style={{ color: '#a07060' }}>
+                  {new Date(h.ts).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                  {' · '}{h.result.cellarRankings.length} wines ranked
+                </p>
+              </div>
+              <span className="text-sm shrink-0" style={{ color: '#c4a090' }}>›</span>
+            </button>
+          ))}
+        </section>
       )}
 
       {/* ── Loading ── */}

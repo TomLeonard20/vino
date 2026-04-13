@@ -329,8 +329,10 @@ function WineConfirmSheet({
   onRescan: () => void
   onDone: () => void
 }) {
-  const [status,   setStatus]   = useState<'idle' | 'saving' | 'done'>('idle')
-  const [wineType, setWineType] = useState<WineType>(wine.wineType ?? 'Red')
+  const [status,        setStatus]        = useState<'idle' | 'saving' | 'done'>('idle')
+  const [wineType,      setWineType]      = useState<WineType>(wine.wineType ?? 'Red')
+  const [purchasePrice, setPurchasePrice] = useState('')
+  const [purchaseDate,  setPurchaseDate]  = useState('')
   const supabase = createClient()
 
   async function save(action: 'cellar' | 'note' | 'both') {
@@ -362,15 +364,18 @@ function WineConfirmSheet({
 
     if (action === 'cellar' || action === 'both') {
       await supabase.from('cellar_bottles').insert({
-        user_id:        user.id,
-        wine_id:        wineRow.id,
-        wine_type:      wineType,
-        quantity:       1,
-        drink_from:     wine.drinkFrom,
-        peak:           wine.peak,
-        drink_to:       wine.drinkTo,
-        market_price:   wine.price_aud,
-        market_currency: 'AUD',
+        user_id:          user.id,
+        wine_id:          wineRow.id,
+        wine_type:        wineType,
+        quantity:         1,
+        drink_from:       wine.drinkFrom,
+        peak:             wine.peak,
+        drink_to:         wine.drinkTo,
+        market_price:     wine.price_aud,
+        market_currency:  'AUD',
+        purchase_price:   purchasePrice ? parseFloat(purchasePrice) : null,
+        purchase_currency: 'AUD',
+        purchase_date:    purchaseDate  || null,
       })
     }
 
@@ -453,6 +458,31 @@ function WineConfirmSheet({
               {t}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Purchase details */}
+      <div className="px-3 pt-3">
+        <p className="text-xs mb-1.5" style={{ color: '#c4a090' }}>Purchase details <span style={{ color: '#7a4a54' }}>(optional)</span></p>
+        <div className="flex gap-2">
+          <div className="flex-1 flex items-center rounded-lg overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+            <span className="pl-2.5 text-xs" style={{ color: '#c4a090' }}>A$</span>
+            <input
+              type="number"
+              placeholder="Price"
+              value={purchasePrice}
+              onChange={e => setPurchasePrice(e.target.value)}
+              className="flex-1 px-2 py-2 text-sm bg-transparent outline-none"
+              style={{ color: 'white' }}
+            />
+          </div>
+          <input
+            type="date"
+            value={purchaseDate}
+            onChange={e => setPurchaseDate(e.target.value)}
+            className="flex-1 px-2.5 py-2 rounded-lg text-sm outline-none"
+            style={{ background: 'rgba(255,255,255,0.08)', color: purchaseDate ? 'white' : '#7a4a54' }}
+          />
         </div>
       </div>
 

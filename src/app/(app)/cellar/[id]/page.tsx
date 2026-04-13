@@ -113,14 +113,21 @@ export default async function WineDetailPage({
             </div>
           )}
         </div>
-        {/* Tags */}
+        {/* Tags with labels */}
         <div className="flex flex-wrap gap-2">
-          {[...(wine.grapes ?? []), wine.region || null, wine.appellation || null, wine.vintage?.toString() || null]
-            .filter(Boolean).map(tag => (
-            <span key={tag}
-                  className="text-xs font-medium px-3 py-1.5 rounded-full"
-                  style={{ background: 'rgba(0,0,0,0.3)', color: 'rgba(255,255,255,0.9)' }}>
-              {tag}
+          {[
+            ...(wine.grapes ?? []).map((g: string) => ({ label: 'Grape', value: g })),
+            wine.region      ? { label: 'Region',  value: wine.region }          : null,
+            wine.appellation ? { label: 'Country', value: wine.appellation }     : null,
+            wine.vintage     ? { label: 'Vintage', value: String(wine.vintage) } : null,
+          ].filter(Boolean).map(tag => (
+            <span
+              key={`${tag!.label}:${tag!.value}`}
+              className="text-xs px-3 py-1.5 rounded-full"
+              style={{ background: 'rgba(0,0,0,0.3)', color: 'rgba(255,255,255,0.9)' }}
+            >
+              <span style={{ color: 'rgba(255,255,255,0.45)', fontWeight: 400 }}>{tag!.label}: </span>
+              <span className="font-medium">{tag!.value}</span>
             </span>
           ))}
         </div>
