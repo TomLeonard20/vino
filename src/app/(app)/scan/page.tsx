@@ -24,10 +24,33 @@ interface ScannedWine {
   criticScore: number | null
   price_aud: number | null
   source: string
+  wineType?: WineType
   drinkFrom?: number
   peak?: number
   drinkTo?: number
   drinkRationale?: string
+}
+
+function detectWineType(grapes: string[], name: string, region: string): WineType {
+  const text = `${name} ${region}`.toLowerCase()
+  // Sparkling/Champagne first
+  if (
+    text.includes('champagne') || text.includes('prosecco') || text.includes('cava') ||
+    text.includes('sparkling') || text.includes('crémant') || text.includes('cremant') ||
+    text.includes('pétillant') || text.includes('pet nat') ||
+    grapes.some(g => g.toLowerCase().includes('champagne'))
+  ) return 'Champagne'
+  // Rosé
+  if (text.includes('rosé') || text.includes('rose') || text.includes('rosado') || text.includes('rosato')) return 'Rosé'
+  // White grapes
+  const WHITE = ['chardonnay','sauvignon blanc','riesling','pinot grigio','pinot gris',
+    'gewürztraminer','viognier','chenin blanc','muscat','albariño','torrontés',
+    'grüner veltliner','verdejo','falanghina','greco','fiano','vermentino','assyrtiko',
+    'arneis','cortese','trebbiano','marsanne','roussanne','sémillon','semillon',
+    'melon de bourgogne','white burgundy']
+  if (grapes.some(g => WHITE.some(w => g.toLowerCase().includes(w)))) return 'White'
+  if (text.includes(' blanc') || text.includes('bianco') || text.includes('white')) return 'White'
+  return 'Red'
 }
 
 export default function ScanPage() {
@@ -80,6 +103,8 @@ export default function ScanPage() {
   async function fetchDrinkingWindow(found: ScannedWine) {
     setState('estimating')
 
+    const detectedType = detectWineType(found.grapes, found.name, found.region)
+
     const windowRes = await fetch('/api/drinking-window', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -89,13 +114,14 @@ export default function ScanPage() {
         region:   found.region,
         vintage:  found.vintage,
         grapes:   found.grapes,
-        wineType: 'Red',
+        wineType: detectedType,
       }),
     })
     const window: DrinkingWindowResult = await windowRes.json()
 
     setWine({
       ...found,
+      wineType:      detectedType,
       drinkFrom:     window.drinkFrom,
       peak:          window.peak,
       drinkTo:       window.drinkTo,
@@ -304,7 +330,7 @@ function WineConfirmSheet({
   onDone: () => void
 }) {
   const [status,   setStatus]   = useState<'idle' | 'saving' | 'done'>('idle')
-  const [wineType, setWineType] = useState<WineType>('Red')
+  const [wineType, setWineType] = useState<WineType>(wine.wineType ?? 'Red')
   const supabase = createClient()
 
   async function save(action: 'cellar' | 'note' | 'both') {

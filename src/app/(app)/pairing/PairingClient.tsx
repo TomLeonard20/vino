@@ -36,12 +36,13 @@ function scoreColor(pct: number) {
 }
 
 export default function PairingClient({ initialMeal }: { initialMeal: string }) {
-  const [meal,     setMeal]     = useState(initialMeal)
-  const [bottles,  setBottles]  = useState<CellarBottle[]>([])
-  const [result,   setResult]   = useState<PairingResult | null>(null)
-  const [loading,  setLoading]  = useState(false)
-  const [error,    setError]    = useState('')
-  const [showAll,  setShowAll]  = useState(false)
+  const [meal,       setMeal]       = useState(initialMeal)
+  const [bottles,    setBottles]    = useState<CellarBottle[]>([])
+  const [result,     setResult]     = useState<PairingResult | null>(null)
+  const [loading,    setLoading]    = useState(false)
+  const [error,      setError]      = useState('')
+  const [showAll,    setShowAll]    = useState(false)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   const supabase = createClient()
   // Track whether we've auto-triggered from the URL param
@@ -190,37 +191,46 @@ export default function PairingClient({ initialMeal }: { initialMeal: string }) 
           </h3>
 
           {displayed.map(({ ranking, bottle }, idx) => {
-            const pct   = ranking!.score
-            const color = scoreColor(pct)
+            const pct     = ranking!.score
+            const color   = scoreColor(pct)
+            const isOpen  = expandedId === ranking!.bottleId
+            const wine    = bottle!.wine as { name?: string; grapes?: string[]; vintage?: number | null } | undefined
+            const subtitle = [wine?.grapes?.[0], wine?.vintage, `×${bottle!.quantity}`].filter(Boolean).join(' · ')
             return (
-              <div key={ranking!.bottleId}
-                   className="rounded-xl overflow-hidden flex"
-                   style={{ background: '#ecddd4' }}>
-                <WineTypeBar type={bottle!.wine_type} />
-                <div className="flex-1 px-3 py-3 flex items-start gap-3">
-                  {/* Rank number */}
-                  <span className="text-xs font-bold mt-0.5 w-5 shrink-0"
-                        style={{ color: '#c4a090' }}>
-                    {idx + 1}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm truncate" style={{ color: '#3a1a20' }}>
-                      {bottle!.wine?.name ?? 'Unknown'}
-                    </p>
-                    {bottle!.wine?.vintage && (
-                      <p className="text-xs" style={{ color: '#a07060' }}>{bottle!.wine.vintage}</p>
-                    )}
-                    <p className="text-xs mt-1 line-clamp-2" style={{ color: '#a07060' }}>
-                      {ranking!.reason}
-                    </p>
-                    {/* Score bar */}
-                    <div className="mt-2 h-1.5 rounded-full overflow-hidden"
-                         style={{ background: 'rgba(0,0,0,0.1)' }}>
-                      <div className="h-full rounded-full transition-all duration-700"
-                           style={{ width: `${pct}%`, background: color }} />
+              <div
+                key={ranking!.bottleId}
+                className="rounded-xl overflow-hidden cursor-pointer active:opacity-80 transition-opacity"
+                style={{ background: '#ecddd4' }}
+                onClick={() => setExpandedId(id => id === ranking!.bottleId ? null : ranking!.bottleId)}
+              >
+                <div className="flex">
+                  <WineTypeBar type={bottle!.wine_type} />
+                  <div className="flex-1 px-3 py-3 flex items-start gap-3">
+                    <span className="text-xs font-bold mt-0.5 w-5 shrink-0" style={{ color: '#c4a090' }}>
+                      {idx + 1}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm truncate" style={{ color: '#3a1a20' }}>
+                        {wine?.name ?? 'Unknown'}
+                      </p>
+                      <p className="text-xs" style={{ color: '#a07060' }}>{subtitle}</p>
+                      {/* Reason — only when expanded */}
+                      {isOpen && (
+                        <p className="text-xs mt-1.5 leading-relaxed" style={{ color: '#7a4a38' }}>
+                          {ranking!.reason}
+                        </p>
+                      )}
+                      {/* Score bar */}
+                      <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.1)' }}>
+                        <div className="h-full rounded-full transition-all duration-700"
+                             style={{ width: `${pct}%`, background: color }} />
+                      </div>
+                    </div>
+                    <div className="shrink-0 flex flex-col items-end gap-1">
+                      <span className="text-sm font-bold" style={{ color }}>{pct}%</span>
+                      <span className="text-xs" style={{ color: '#c4a090' }}>{isOpen ? '▲' : '▼'}</span>
                     </div>
                   </div>
-                  <span className="text-sm font-bold shrink-0" style={{ color }}>{pct}%</span>
                 </div>
               </div>
             )

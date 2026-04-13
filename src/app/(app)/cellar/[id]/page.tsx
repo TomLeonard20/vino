@@ -136,22 +136,19 @@ export default async function WineDetailPage({
             Wine Details
           </p>
           <div className="grid grid-cols-2 gap-2">
-            {wine.producer && <Cell label="Producer" value={wine.producer} />}
-            {wine.region   && <Cell label="Appellation" value={wine.region} />}
-            {b.purchase_price != null && (
-              <Cell label="Purchase price" value={`A$${b.purchase_price}`} />
-            )}
-            {b.market_price != null && (
-              <Cell label="Market price" value={`A$${b.market_price}`} />
-            )}
-            <Cell label="Added" value={purchaseDate} valueLarge />
-            {valueChange !== null && valuePct !== null && (
+            <Cell label="Producer"       value={wine.producer || '—'} />
+            <Cell label="Region"         value={wine.region   || wine.appellation || '—'} />
+            <Cell label="Purchase price" value={b.purchase_price != null ? `A$${b.purchase_price}` : '—'} />
+            <Cell label="Market price"   value={b.market_price   != null ? `A$${b.market_price}`   : '—'} />
+            <Cell label="Added"          value={purchaseDate} />
+            {valueChange !== null && valuePct !== null ? (
               <Cell
                 label="Value change"
                 value={`${valueChange >= 0 ? '+' : ''}A$${Math.abs(valueChange)} (${valuePct >= 0 ? '+' : ''}${valuePct}%)`}
                 valueColor={valueChange >= 0 ? '#2e7d32' : '#c62828'}
-                valueLarge
               />
+            ) : (
+              <Cell label="Value change" value="—" />
             )}
           </div>
         </section>

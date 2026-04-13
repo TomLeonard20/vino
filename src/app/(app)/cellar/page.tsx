@@ -4,6 +4,7 @@ import type { CellarBottle, WineType } from '@/types/database'
 import ScoreBadge from '@/components/ui/ScoreBadge'
 import WindowStatusPill from '@/components/ui/WindowStatusPill'
 import WineTypeBar from '@/components/ui/WineTypeBar'
+import CellarBottleCard from '@/components/ui/CellarBottleCard'
 import Link from 'next/link'
 
 const WINE_TYPES: WineType[] = ['Red', 'White', 'Rosé', 'Champagne']
@@ -112,7 +113,7 @@ export default async function CellarPage({
               <span className="text-xs" style={{ color: '#c4a090' }}>↓ Score</span>
             </div>
             {group.bottles.map(bottle => (
-              <BottleRow key={bottle.id} bottle={bottle} />
+              <CellarBottleCard key={bottle.id} bottle={bottle} />
             ))}
           </div>
         ))
@@ -130,35 +131,3 @@ export default async function CellarPage({
   )
 }
 
-function BottleRow({ bottle }: { bottle: CellarBottle }) {
-  const status = drinkingStatus(bottle)
-  const wine = bottle.wine
-
-  return (
-    <Link href={`/cellar/${bottle.id}`} className="rounded-xl overflow-hidden flex active:opacity-70 transition-opacity"
-          style={{ background: '#ecddd4' }}>
-      <WineTypeBar type={bottle.wine_type} />
-      <div className="flex-1 px-3 py-3 flex items-start gap-3">
-        <ScoreBadge score={wine?.critic_score ?? null} size="sm" />
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-sm truncate" style={{ color: '#3a1a20' }}>
-            {wine?.name ?? 'Unknown wine'}
-          </p>
-          <p className="text-xs mt-0.5" style={{ color: '#a07060' }}>
-            {[wine?.grapes?.[0], wine?.appellation || wine?.region, wine?.vintage].filter(Boolean).join(' · ')}
-          </p>
-          {(bottle.purchase_price ?? bottle.market_price) && (
-            <p className="text-xs" style={{ color: '#c4a090' }}>
-              A${bottle.purchase_price ?? bottle.market_price}
-            </p>
-          )}
-        </div>
-        <div className="text-right shrink-0 space-y-1">
-          <p className="font-bold text-sm" style={{ color: '#3a1a20' }}>×{bottle.quantity}</p>
-          <WindowStatusPill status={status} compact />
-          <span className="text-xs" style={{ color: '#c4a090' }}>›</span>
-        </div>
-      </div>
-    </Link>
-  )
-}

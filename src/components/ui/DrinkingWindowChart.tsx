@@ -55,15 +55,14 @@ function statusInfo(drinkFrom: number, peak: number, drinkTo: number) {
 }
 
 export default function DrinkingWindowChart({ drinkFrom, peak, drinkTo, estimated }: Props) {
-  // Axis spans from 3 years before NOW (or drinkFrom-1, whichever is earlier)
-  // to at least drinkTo+3 or NOW+15, so there's always plenty of future context
-  const axisStart  = Math.min(drinkFrom - 1, NOW - 2)
-  const axisEnd    = Math.max(drinkTo + 3, NOW + 15, axisStart + 14)
+  // Always span from NOW (or earlier if drinkFrom is sooner) to 2050
+  const axisStart  = Math.min(NOW, drinkFrom - 1)
+  const axisEnd    = 2050
   const totalYears = axisEnd - axisStart
   const years      = Array.from({ length: totalYears + 1 }, (_, i) => axisStart + i)
 
-  // Year tick marks every 3 years along the bottom
-  const tickYears  = years.filter(y => y % 3 === 0)
+  // Year tick marks every 5 years along the bottom
+  const tickYears  = years.filter(y => y % 5 === 0)
 
   const status = statusInfo(drinkFrom, peak, drinkTo)
 

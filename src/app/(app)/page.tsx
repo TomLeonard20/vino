@@ -3,6 +3,7 @@ import { drinkingStatus, starsForScore, CURRENCY_SYMBOLS } from '@/types/databas
 import type { CellarBottle, TastingNote } from '@/types/database'
 import ScoreBadge from '@/components/ui/ScoreBadge'
 import StarRating from '@/components/ui/StarRating'
+import CellarBalanceChart from '@/components/ui/CellarBalanceChart'
 import Link from 'next/link'
 
 function greeting() {
@@ -67,6 +68,11 @@ export default async function HomePage() {
           </div>
         ))}
       </div>
+
+      {/* ── Cellar balance ── */}
+      {allBottles.length > 0 && (
+        <CellarBalanceChart bottles={allBottles} />
+      )}
 
       {/* ── 1. Pair my meal ── */}
       <div className="rounded-xl p-4 space-y-2" style={{ background: '#ecddd4' }}>
