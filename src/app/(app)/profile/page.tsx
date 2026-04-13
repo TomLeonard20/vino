@@ -1,18 +1,22 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import SignOutButton from './SignOutButton'
+import SharingSection from './SharingSection'
 
 export default async function ProfilePage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [{ count: noteCount }, { data: bottles }] = await Promise.all([
+  const [{ count: noteCount }, { data: bottles }, { data: members }] = await Promise.all([
     supabase.from('tasting_notes').select('*', { count: 'exact', head: true }),
     supabase.from('cellar_bottles').select('quantity'),
+    supabase.from('cellar_members').select('cellar_id, user_id'),
   ])
 
-  const totalBottles = (bottles ?? []).reduce((s, b) => s + b.quantity, 0)
+  const totalBottles  = (bottles ?? []).reduce((s, b) => s + b.quantity, 0)
+  const memberCount   = (members ?? []).length
+  const isShared      = memberCount > 1
 
   return (
     <div className="space-y-5 pb-4">
@@ -46,6 +50,9 @@ export default async function ProfilePage() {
           </div>
         ))}
       </div>
+
+      {/* Shared cellar */}
+      <SharingSection memberCount={memberCount} isShared={isShared} />
 
       {/* Pro upsell */}
       <div className="rounded-xl p-4" style={{ background: '#ecddd4' }}>

@@ -47,7 +47,13 @@ function MiniCell({ label, value }: { label: string; value: string }) {
   )
 }
 
-export default function CellarBottleCard({ bottle }: { bottle: CellarBottle }) {
+export default function CellarBottleCard({
+  bottle,
+  currentUserId,
+}: {
+  bottle: CellarBottle
+  currentUserId?: string
+}) {
   const wine = bottle.wine as {
     name?: string
     critic_score?: number | null
@@ -57,6 +63,7 @@ export default function CellarBottleCard({ bottle }: { bottle: CellarBottle }) {
     vintage?: number | null
   } | undefined
   const { label, color } = smartPeakLabel(bottle)
+  const isPartnerBottle = !!(bottle.added_by && currentUserId && bottle.added_by !== currentUserId)
 
   return (
     <Link
@@ -78,10 +85,16 @@ export default function CellarBottleCard({ bottle }: { bottle: CellarBottle }) {
           </span>
         </div>
 
-        {/* Row 2: vintage + grape mini-cells + peak status */}
+        {/* Row 2: vintage + grape mini-cells + peak status + partner badge */}
         <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-          {wine?.vintage    && <MiniCell label="Vintage" value={String(wine.vintage)} />}
+          {wine?.vintage     && <MiniCell label="Vintage" value={String(wine.vintage)} />}
           {wine?.grapes?.[0] && <MiniCell label="Grape"   value={wine.grapes[0]} />}
+          {isPartnerBottle   && (
+            <span className="text-xs px-1.5 py-0.5 rounded font-medium"
+                  style={{ background: 'rgba(139,32,53,0.12)', color: '#8b2035', fontSize: 9 }}>
+              Partner
+            </span>
+          )}
           <span className="ml-auto text-xs font-medium shrink-0 whitespace-nowrap" style={{ color }}>
             {label}
           </span>

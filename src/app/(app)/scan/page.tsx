@@ -343,15 +343,29 @@ function WineConfirmSheet({
   const [purchaseDate,  setPurchaseDate]  = useState('')
   const supabase = createClient()
 
+  async function getCellarId(userId: string): Promise<string | null> {
+    const { data } = await supabase
+      .from('cellar_members')
+      .select('cellar_id')
+      .eq('user_id', userId)
+      .order('joined_at', { ascending: true })
+      .limit(1)
+      .single()
+    return data?.cellar_id ?? null
+  }
+
   async function save(action: 'cellar' | 'note' | 'both') {
     setStatus('saving')
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
+    const cellarId = await getCellarId(user.id)
+
     const { data: wineRow, error: wineErr } = await supabase
       .from('wines')
       .insert({
         user_id:      user.id,
+        cellar_id:    cellarId,
         name:         wine.name,
         producer:     wine.producer,
         region:       wine.region,
@@ -372,18 +386,20 @@ function WineConfirmSheet({
 
     if (action === 'cellar' || action === 'both') {
       await supabase.from('cellar_bottles').insert({
-        user_id:          user.id,
-        wine_id:          wineRow.id,
-        wine_type:        wineType,
-        quantity:         1,
-        drink_from:       wine.drinkFrom,
-        peak:             wine.peak,
-        drink_to:         wine.drinkTo,
-        market_price:     wine.price_aud,
-        market_currency:  'AUD',
-        purchase_price:   purchasePrice ? parseFloat(purchasePrice) : null,
+        user_id:           user.id,
+        cellar_id:         cellarId,
+        added_by:          user.id,
+        wine_id:           wineRow.id,
+        wine_type:         wineType,
+        quantity:          1,
+        drink_from:        wine.drinkFrom,
+        peak:              wine.peak,
+        drink_to:          wine.drinkTo,
+        market_price:      wine.price_aud,
+        market_currency:   'AUD',
+        purchase_price:    purchasePrice ? parseFloat(purchasePrice) : null,
         purchase_currency: 'AUD',
-        purchase_date:    purchaseDate  || null,
+        purchase_date:     purchaseDate  || null,
       })
     }
 
@@ -542,7 +558,7 @@ function ManualEntrySheet({ onDone, onCancel }: { onDone: () => void; onCancel: 
   const [vintage,  setVintage]  = useState('')
   const [wineType, setWineType] = useState<WineType>('Red')
   const [status,   setStatus]   = useState<'idle' | 'estimating' | 'saving' | 'done'>('idle')
-  const [window,   setWindow]   = useState<DrinkingWindowResult | null>(null)
+  const [drinkWindow, setDrinkWindow] = useState<DrinkingWindowResult | null>(null)
   const supabase = createClient()
 
   async function estimate() {
@@ -553,7 +569,7 @@ function ManualEntrySheet({ onDone, onCancel }: { onDone: () => void; onCancel: 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, producer, region, vintage: vintage ? parseInt(vintage) : null, wineType }),
     })
-    setWindow(await res.json())
+    setDrinkWindow(await res.json())
     setStatus('idle')
   }
 
@@ -563,15 +579,25 @@ function ManualEntrySheet({ onDone, onCancel }: { onDone: () => void; onCancel: 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
+    const { data: memberRow } = await supabase
+      .from('cellar_members')
+      .select('cellar_id')
+      .eq('user_id', user.id)
+      .order('joined_at', { ascending: true })
+      .limit(1)
+      .single()
+    const cellarId = memberRow?.cellar_id ?? null
+
     const { data: wineRow } = await supabase
       .from('wines')
       .insert({
-        user_id:  user.id,
-        name:     name.trim(),
-        producer: producer.trim(),
-        region:   region.trim(),
-        vintage:  vintage ? parseInt(vintage) : null,
-        grapes:   [],
+        user_id:   user.id,
+        cellar_id: cellarId,
+        name:      name.trim(),
+        producer:  producer.trim(),
+        region:    region.trim(),
+        vintage:   vintage ? parseInt(vintage) : null,
+        grapes:    [],
         db_source: 'Manual entry',
       })
       .select()
@@ -580,12 +606,14 @@ function ManualEntrySheet({ onDone, onCancel }: { onDone: () => void; onCancel: 
     if (wineRow) {
       await supabase.from('cellar_bottles').insert({
         user_id:    user.id,
+        cellar_id:  cellarId,
+        added_by:   user.id,
         wine_id:    wineRow.id,
         wine_type:  wineType,
         quantity:   1,
-        drink_from: window?.drinkFrom,
-        peak:       window?.peak,
-        drink_to:   window?.drinkTo,
+        drink_from: drinkWindow?.drinkFrom,
+        peak:       drinkWindow?.peak,
+        drink_to:   drinkWindow?.drinkTo,
       })
     }
 
@@ -634,11 +662,11 @@ function ManualEntrySheet({ onDone, onCancel }: { onDone: () => void; onCancel: 
           ))}
         </div>
 
-        {window ? (
+        {drinkWindow ? (
           <div className="text-xs rounded-lg px-3 py-2"
                style={{ background: 'rgba(139,32,53,0.3)', color: '#f5ede6' }}>
-            🍷 Drink {window.drinkFrom}–{window.drinkTo} · Peak {window.peak}
-            <span className="block mt-0.5 italic opacity-70">{window.rationale}</span>
+            🍷 Drink {drinkWindow.drinkFrom}–{drinkWindow.drinkTo} · Peak {drinkWindow.peak}
+            <span className="block mt-0.5 italic opacity-70">{drinkWindow.rationale}</span>
           </div>
         ) : (
           <button onClick={estimate} disabled={!name.trim() || status === 'estimating'}

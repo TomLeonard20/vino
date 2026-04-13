@@ -37,10 +37,15 @@ export default async function WineDetailPage({
 
   if (!bottle) notFound()
 
-  const b     = bottle as CellarBottle
-  const wine  = b.wine!
-  const notes = (wine.tasting_notes ?? []) as TastingNote[]
-  const fp    = wine.flavour_profile as FlavourProfile | null
+  const { data: { user } } = await supabase.auth.getUser()
+
+  const b      = bottle as CellarBottle
+  const wine   = b.wine!
+  const notes  = (wine.tasting_notes ?? []) as TastingNote[]
+  const fp     = wine.flavour_profile as FlavourProfile | null
+
+  const myNotes      = notes.filter(n => n.user_id === user?.id)
+  const partnerNotes = notes.filter(n => n.user_id !== user?.id)
 
   const hasWindow = !!(b.drink_from && b.drink_to && b.peak)
 
@@ -250,28 +255,38 @@ export default async function WineDetailPage({
 
         {/* MY TASTING NOTES */}
         <section>
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-bold tracking-widest uppercase"
-               style={{ color: '#b09080', letterSpacing: '0.15em' }}>
-              My Tasting Notes
-            </p>
-            {notes.length > 1 && (
-              <span className="text-xs font-medium" style={{ color: '#8b2035' }}>See all</span>
-            )}
-          </div>
+          <p className="text-xs font-bold tracking-widest uppercase mb-3"
+             style={{ color: '#b09080', letterSpacing: '0.15em' }}>
+            My Tasting Notes
+          </p>
 
-          {notes.length === 0 ? (
+          {myNotes.length === 0 ? (
             <div className="rounded-2xl p-5 text-center" style={{ background: '#ecddd4' }}>
               <p className="text-sm" style={{ color: '#c4a090' }}>No tasting notes yet.</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {notes.slice(0, 2).map(note => (
+              {myNotes.slice(0, 2).map(note => (
                 <NoteCard key={note.id} note={note} />
               ))}
             </div>
           )}
         </section>
+
+        {/* PARTNER TASTING NOTES (only visible if shared cellar) */}
+        {partnerNotes.length > 0 && (
+          <section>
+            <p className="text-xs font-bold tracking-widest uppercase mb-3"
+               style={{ color: '#b09080', letterSpacing: '0.15em' }}>
+              Partner's Tasting Notes
+            </p>
+            <div className="space-y-3">
+              {partnerNotes.slice(0, 2).map(note => (
+                <NoteCard key={note.id} note={note} isPartner />
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Add note bar */}
         <div className="rounded-2xl h-12" style={{ background: '#ecddd4' }} />
@@ -299,20 +314,27 @@ function Cell({
   )
 }
 
-function NoteCard({ note }: { note: TastingNote }) {
+function NoteCard({ note, isPartner }: { note: TastingNote; isPartner?: boolean }) {
   const date = new Date(note.tasted_at).toLocaleDateString('en-AU', {
     day: 'numeric', month: 'short', year: 'numeric',
   })
   const tags = [...(note.nose_tags ?? []), ...(note.palate_tags ?? [])]
 
   return (
-    <div className="rounded-2xl p-4 space-y-2" style={{ background: '#ecddd4' }}>
+    <div className="rounded-2xl p-4 space-y-2"
+         style={{ background: isPartner ? '#e8dcd4' : '#ecddd4', border: isPartner ? '1px solid #d4b8aa' : 'none' }}>
       <div className="flex items-start justify-between gap-2">
-        <div>
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm font-bold" style={{ color: '#3a1a20' }}>{note.score} pts · </span>
           <span style={{ color: '#8b2035' }}>
             {'★'.repeat(note.stars)}{'☆'.repeat(Math.max(0, 5 - note.stars))}
           </span>
+          {isPartner && (
+            <span className="text-xs px-2 py-0.5 rounded-full font-medium"
+                  style={{ background: '#8b2035', color: 'white' }}>
+              Partner
+            </span>
+          )}
         </div>
         <span className="text-xs shrink-0" style={{ color: '#a07060' }}>{date}</span>
       </div>

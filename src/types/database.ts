@@ -10,6 +10,7 @@ export type WSETReadiness = 'Too young' | 'Drink now' | 'At peak' | 'Fading'
 export interface Wine {
   id: string
   user_id: string
+  cellar_id: string | null
   name: string
   producer: string
   region: string
@@ -40,6 +41,8 @@ export interface FlavourProfile {
 export interface CellarBottle {
   id: string
   user_id: string
+  cellar_id: string | null
+  added_by: string | null
   wine_id: string
   wine_type: WineType
   quantity: number

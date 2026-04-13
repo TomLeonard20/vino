@@ -12,10 +12,11 @@ const WINE_TYPES: WineType[] = ['Red', 'White', 'Rosé', 'Champagne']
 export default async function CellarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ type?: string }>
+  searchParams: Promise<{ type?: string; joined?: string }>
 }) {
   const { type: filterType } = await searchParams
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
 
   const { data } = await supabase
     .from('cellar_bottles')
@@ -113,7 +114,7 @@ export default async function CellarPage({
               <span className="text-xs" style={{ color: '#c4a090' }}>↓ Score</span>
             </div>
             {group.bottles.map(bottle => (
-              <CellarBottleCard key={bottle.id} bottle={bottle} />
+              <CellarBottleCard key={bottle.id} bottle={bottle} currentUserId={user?.id} />
             ))}
           </div>
         ))
