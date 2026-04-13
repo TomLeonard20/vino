@@ -15,7 +15,6 @@ const tabs = [
 
 export default function Nav({ user }: { user: User }) {
   const pathname = usePathname()
-  const router = useRouter()
   const initials = user.email?.slice(0, 2).toUpperCase() ?? 'ME'
 
   return (
