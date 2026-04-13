@@ -70,8 +70,20 @@ export default async function HomePage() {
       </div>
 
       {/* ── Cellar balance ── */}
-      {allBottles.length > 0 && (
+      {totalBottles >= 10 ? (
         <CellarBalanceChart bottles={allBottles} />
+      ) : (
+        <div className="rounded-2xl px-4 py-5 flex items-center gap-3"
+             style={{ background: '#ecddd4', border: '1.5px dashed #c4a090' }}>
+          <span className="text-2xl">📊</span>
+          <div>
+            <p className="text-sm font-semibold" style={{ color: '#3a1a20' }}>Cellar by Vintage</p>
+            <p className="text-xs mt-0.5" style={{ color: '#a07060' }}>
+              Chart unlocks once you&apos;ve added 10 bottles
+              {totalBottles > 0 ? ` · ${totalBottles} of 10 so far` : ''}.
+            </p>
+          </div>
+        </div>
       )}
 
       {/* ── 1. Pair my meal ── */}
