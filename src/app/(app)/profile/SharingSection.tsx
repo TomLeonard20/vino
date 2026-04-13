@@ -8,19 +8,29 @@ interface Props {
 }
 
 export default function SharingSection({ memberCount, isShared }: Props) {
-  const [tab,      setTab]      = useState<'invite' | 'join'>('invite')
-  const [code,     setCode]     = useState<string | null>(null)
-  const [joinCode, setJoinCode] = useState('')
-  const [loading,  setLoading]  = useState(false)
-  const [copied,   setCopied]   = useState(false)
-  const [joinMsg,  setJoinMsg]  = useState<{ ok: boolean; text: string } | null>(null)
+  const [tab,        setTab]      = useState<'invite' | 'join'>('invite')
+  const [code,       setCode]     = useState<string | null>(null)
+  const [joinCode,   setJoinCode] = useState('')
+  const [loading,    setLoading]  = useState(false)
+  const [copied,     setCopied]   = useState(false)
+  const [joinMsg,    setJoinMsg]  = useState<{ ok: boolean; text: string } | null>(null)
+  const [inviteErr,  setInviteErr] = useState<string | null>(null)
 
   async function generateInvite() {
     setLoading(true)
-    const res  = await fetch('/api/cellar/invite', { method: 'POST' })
-    const data = await res.json()
+    setInviteErr(null)
+    try {
+      const res  = await fetch('/api/cellar/invite', { method: 'POST' })
+      const data = await res.json()
+      if (data.code) {
+        setCode(data.code)
+      } else {
+        setInviteErr(data.error ?? `Error ${res.status}`)
+      }
+    } catch (e) {
+      setInviteErr(String(e))
+    }
     setLoading(false)
-    if (data.code) setCode(data.code)
   }
 
   async function copyLink() {
@@ -128,18 +138,25 @@ export default function SharingSection({ memberCount, isShared }: Props) {
                 </button>
               </>
             ) : (
-              <button
-                onClick={generateInvite}
-                disabled={loading}
-                className="w-full py-2.5 rounded-xl text-sm font-semibold"
-                style={{
-                  background: '#8b2035',
-                  color: 'white',
-                  opacity: loading ? 0.6 : 1,
-                }}
-              >
-                {loading ? 'Generating…' : 'Generate invite code'}
-              </button>
+              <>
+                <button
+                  onClick={generateInvite}
+                  disabled={loading}
+                  className="w-full py-2.5 rounded-xl text-sm font-semibold"
+                  style={{
+                    background: '#8b2035',
+                    color: 'white',
+                    opacity: loading ? 0.6 : 1,
+                  }}
+                >
+                  {loading ? 'Generating…' : 'Generate invite code'}
+                </button>
+                {inviteErr && (
+                  <p className="text-xs text-center mt-1" style={{ color: '#8b2035' }}>
+                    ⚠ {inviteErr}
+                  </p>
+                )}
+              </>
             )}
           </div>
         )}
