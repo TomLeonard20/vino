@@ -2,20 +2,26 @@ import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
-const USD_TO_AUD = 1.58
+const USD_TO_AUD  = 1.58
+const CURRENT_YEAR = new Date().getFullYear()
 
 export interface LabelScanResult {
-  name:        string
-  producer:    string
-  region:      string
-  country:     string   // stored in wines.appellation
-  vintage:     number | null
-  grapes:      string[]
-  wineType:    'Red' | 'White' | 'Rosé' | 'Champagne' | 'Sparkling' | 'Dessert'
-  source:      'label_scan' | 'catalogue'
-  criticScore: number | null
-  price_aud:   number | null
-  description: string
+  name:          string
+  producer:      string
+  region:        string
+  country:       string   // stored in wines.appellation
+  vintage:       number | null
+  grapes:        string[]
+  wineType:      'Red' | 'White' | 'Rosé' | 'Champagne' | 'Sparkling' | 'Dessert'
+  source:        'label_scan' | 'catalogue'
+  criticScore:   number | null
+  price_aud:     number | null
+  description:   string
+  // Drinking window — returned inline so we avoid a second API call
+  drinkFrom?:    number
+  peak?:         number
+  drinkTo?:      number
+  drinkRationale?: string
 }
 
 /** Strip markdown code fences that Claude sometimes adds despite instructions */
@@ -40,11 +46,11 @@ async function enrichFromCatalogue(name: string, producer: string, vintage: numb
 
     if (!data) return null
     return {
-      criticScore: data.points   ?? null,
+      criticScore: data.points    ?? null,
       price_aud:   data.price_usd ? Math.round(data.price_usd * USD_TO_AUD) : null,
-      grapes:      data.variety  ? [data.variety] : [],
-      region:      data.region   ?? '',
-      country:     data.country  ?? '',
+      grapes:      data.variety   ? [data.variety] : [],
+      region:      data.region    ?? '',
+      country:     data.country   ?? '',
       description: data.description ?? '',
     }
   } catch {
@@ -69,8 +75,10 @@ export async function POST(request: Request) {
   const client = new Anthropic({ apiKey })
 
   try {
+    // Single Haiku call: read label + estimate drinking window in one shot
+    // Haiku is ~4× faster than Sonnet for structured extraction tasks
     const message = await client.messages.create({
-      model:      'claude-sonnet-4-20250514',
+      model:      'claude-haiku-4-5',
       max_tokens: 512,
       messages: [
         {
@@ -82,24 +90,29 @@ export async function POST(request: Request) {
             },
             {
               type: 'text',
-              text: `Look at this wine label image and extract the wine details.
-Return ONLY a raw JSON object — no markdown, no code fences, no explanation:
+              text: `Read this wine label and return ONLY a raw JSON object — no markdown, no explanation:
 {
   "name": "full wine name",
-  "producer": "winery or producer name",
+  "producer": "winery name",
   "region": "appellation or region",
   "vintage": 2019,
   "grapes": ["Cabernet Sauvignon"],
   "wineType": "Red",
+  "drinkFrom": ${CURRENT_YEAR},
+  "peak": ${CURRENT_YEAR + 5},
+  "drinkTo": ${CURRENT_YEAR + 10},
+  "drinkRationale": "one short sentence, max 80 chars",
   "unreadable": false
 }
 
 Rules:
-- vintage must be a number (4-digit year) or null if not visible
-- wineType must be exactly one of: Red, White, Rosé, Champagne, Sparkling, Dessert
-- grapes must be an array of strings (empty array [] if not shown on label)
-- If this is not a wine label or you genuinely cannot read it, set "unreadable": true
-- Do NOT wrap in markdown or code blocks — raw JSON only`,
+- vintage: 4-digit integer or null
+- wineType: exactly one of Red, White, Rosé, Champagne, Sparkling, Dessert
+- grapes: array of strings, [] if not on label
+- drinkFrom/peak/drinkTo: integers — estimate based on wine style, region, vintage
+- drinkRationale: one sentence explaining the window (max 80 chars)
+- If not a wine label, set "unreadable": true
+- Raw JSON only — no code blocks`,
             },
           ],
         },
@@ -109,7 +122,7 @@ Rules:
     const rawText = (message.content[0] as { type: string; text: string }).text
     const cleaned = extractJson(rawText)
 
-    let parsed: LabelScanResult & { unreadable?: boolean }
+    let parsed: LabelScanResult & { unreadable?: boolean; drinkFrom?: number; peak?: number; drinkTo?: number; drinkRationale?: string }
     try {
       parsed = JSON.parse(cleaned)
     } catch {
@@ -125,7 +138,7 @@ Rules:
     const producer = parsed.producer || ''
     const vintage  = parsed.vintage  ?? null
 
-    // Enrich with catalogue data (price, score) — doesn't cost an API call
+    // Catalogue enrichment runs in parallel (no API call — just Supabase)
     const enriched = await enrichFromCatalogue(name, producer, vintage)
 
     return NextResponse.json({
@@ -133,15 +146,20 @@ Rules:
       wine: {
         name,
         producer,
-        region:      enriched?.region      || parsed.region   || '',
-        country:     enriched?.country     || '',
+        region:         enriched?.region      || parsed.region   || '',
+        country:        enriched?.country     || '',
         vintage,
-        grapes:      enriched?.grapes?.length ? enriched.grapes : (Array.isArray(parsed.grapes) ? parsed.grapes : []),
-        wineType:    parsed.wineType || 'Red',
-        source:      'label_scan' as const,
-        criticScore: enriched?.criticScore ?? null,
-        price_aud:   enriched?.price_aud   ?? null,
-        description: enriched?.description ?? '',
+        grapes:         enriched?.grapes?.length ? enriched.grapes : (Array.isArray(parsed.grapes) ? parsed.grapes : []),
+        wineType:       parsed.wineType || 'Red',
+        source:         'label_scan' as const,
+        criticScore:    enriched?.criticScore ?? null,
+        price_aud:      enriched?.price_aud   ?? null,
+        description:    enriched?.description ?? '',
+        // Drinking window inline — client skips second API call
+        drinkFrom:      parsed.drinkFrom,
+        peak:           parsed.peak,
+        drinkTo:        parsed.drinkTo,
+        drinkRationale: parsed.drinkRationale,
       } satisfies LabelScanResult,
     })
   } catch (err) {

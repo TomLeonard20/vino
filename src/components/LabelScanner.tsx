@@ -54,16 +54,17 @@ export default function LabelScanner({ onCapture, active }: Props) {
       return
     }
 
-    const MAX   = 1280
+    // 800px is plenty for reading label text; smaller = faster upload + faster API
+    const MAX   = 800
     const scale = video.videoWidth > MAX ? MAX / video.videoWidth : 1
-    const w     = Math.round((video.videoWidth  || 1280) * scale)
-    const h     = Math.round((video.videoHeight || 720)  * scale)
+    const w     = Math.round((video.videoWidth  || 800) * scale)
+    const h     = Math.round((video.videoHeight || 600) * scale)
 
     const canvas = document.createElement('canvas')
     canvas.width  = w
     canvas.height = h
     canvas.getContext('2d')!.drawImage(video, 0, 0, w, h)
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.90)
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.75)   // 0.75 quality — still crisp for text
     onCapture(dataUrl)
   }
 

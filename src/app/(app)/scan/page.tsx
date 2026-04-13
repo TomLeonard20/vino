@@ -99,11 +99,19 @@ export default function ScanPage() {
     setState('no_barcode')
   }
 
-  // ── Shared: estimate drinking window ───────────────────────
+  // ── Shared: get drinking window (skip second API call if label-scan already returned it) ──
   async function fetchDrinkingWindow(found: ScannedWine) {
-    setState('estimating')
-
     const detectedType = detectWineType(found.grapes, found.name, found.region)
+
+    // Label-scan already estimates the window inline — no second round-trip needed
+    if (found.drinkFrom && found.peak && found.drinkTo) {
+      setWine({ ...found, wineType: detectedType })
+      setState('found')
+      return
+    }
+
+    // Fallback: call the dedicated endpoint (barcode flow, manual entry)
+    setState('estimating')
 
     const windowRes = await fetch('/api/drinking-window', {
       method: 'POST',
@@ -117,15 +125,15 @@ export default function ScanPage() {
         wineType: detectedType,
       }),
     })
-    const window: DrinkingWindowResult = await windowRes.json()
+    const windowData: DrinkingWindowResult = await windowRes.json()
 
     setWine({
       ...found,
-      wineType:      detectedType,
-      drinkFrom:     window.drinkFrom,
-      peak:          window.peak,
-      drinkTo:       window.drinkTo,
-      drinkRationale: window.rationale,
+      wineType:       detectedType,
+      drinkFrom:      windowData.drinkFrom,
+      peak:           windowData.peak,
+      drinkTo:        windowData.drinkTo,
+      drinkRationale: windowData.rationale,
     })
     setState('found')
   }
