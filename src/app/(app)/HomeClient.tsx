@@ -64,7 +64,8 @@ interface Props {
 }
 
 export default function HomeClient({ name, totalBottles, drinkSoon, noteCount, allBottles, recentNotes }: Props) {
-  const [lang, setLang] = useState<Lang>('en')
+  const [lang, setLang]   = useState<Lang>('en')
+  const [open, setOpen]   = useState(false)
   const hour = new Date().getHours()
 
   // Persist language preference
@@ -75,36 +76,68 @@ export default function HomeClient({ name, totalBottles, drinkSoon, noteCount, a
     } catch {}
   }, [])
 
-  function toggleLang() {
-    const next: Lang = lang === 'en' ? 'it' : 'en'
-    setLang(next)
-    try { localStorage.setItem('vino-lang', next) } catch {}
+  function selectLang(l: Lang) {
+    setLang(l)
+    setOpen(false)
+    try { localStorage.setItem('vino-lang', l) } catch {}
   }
 
   const t = COPY[lang]
 
+  const LANGUAGES: { code: Lang; flag: string; label: string }[] = [
+    { code: 'en', flag: '🇬🇧', label: 'English' },
+    { code: 'it', flag: '🇮🇹', label: 'Italiano' },
+  ]
+  const current = LANGUAGES.find(l => l.code === lang)!
+
   return (
     <div className="space-y-5 pb-4">
 
-      {/* ── Greeting + language toggle ── */}
+      {/* ── Greeting + language selector ── */}
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-xl font-semibold" style={{ color: '#3a1a20' }}>
           {t.greeting(hour)}, {name}
         </h2>
-        <button
-          onClick={toggleLang}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
-          style={{
-            background: lang === 'it' ? '#8b2035' : '#ecddd4',
-            color:      lang === 'it' ? 'white'   : '#a07060',
-            border:     '1.5px solid',
-            borderColor: lang === 'it' ? '#8b2035' : '#d4b8aa',
-          }}
-          aria-label="Toggle language"
-        >
-          <span>{lang === 'it' ? '🇮🇹' : '🇬🇧'}</span>
-          <span>{lang === 'it' ? 'IT' : 'EN'}</span>
-        </button>
+
+        {/* Language dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setOpen(o => !o)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium"
+            style={{ background: '#ecddd4', color: '#3a1a20', border: '1.5px solid #d4b8aa' }}
+          >
+            <span>{current.flag}</span>
+            <span>{current.label}</span>
+            <span style={{ color: '#a07060', fontSize: 9 }}>▾</span>
+          </button>
+
+          {open && (
+            <>
+              {/* Backdrop */}
+              <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+              {/* Menu */}
+              <div className="absolute right-0 top-full mt-1.5 z-20 rounded-xl overflow-hidden shadow-lg"
+                   style={{ background: '#f5ede6', border: '1px solid #d4b8aa', minWidth: 130 }}>
+                {LANGUAGES.map(l => (
+                  <button
+                    key={l.code}
+                    onClick={() => selectLang(l.code)}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-left transition-colors"
+                    style={{
+                      background: lang === l.code ? '#ecddd4' : 'transparent',
+                      color: '#3a1a20',
+                      fontWeight: lang === l.code ? 600 : 400,
+                    }}
+                  >
+                    <span>{l.flag}</span>
+                    <span>{l.label}</span>
+                    {lang === l.code && <span className="ml-auto" style={{ color: '#8b2035' }}>✓</span>}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* ── Stats row ── */}
