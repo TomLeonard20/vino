@@ -97,14 +97,13 @@ export default async function CellarPage({
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-px rounded-xl overflow-hidden border"
-           style={{ borderColor: '#d4b8aa' }}>
+      <div className="grid grid-cols-3 gap-2">
         {[
           { label: 'Bottles',    value: totalBottles },
           { label: 'Drink soon', value: drinkSoon, highlight: drinkSoon > 0 },
           { label: 'Est. value', value: estValue > 0 ? `A$${Math.round(estValue)}` : '—' },
         ].map(s => (
-          <div key={s.label} className="text-center py-4 px-2" style={{ background: '#ecddd4' }}>
+          <div key={s.label} className="text-center py-4 px-2 rounded-xl" style={{ background: '#ecddd4' }}>
             <div className="text-xl font-bold"
                  style={{ color: 'highlight' in s && s.highlight ? '#8b2035' : '#3a1a20' }}>
               {s.value}

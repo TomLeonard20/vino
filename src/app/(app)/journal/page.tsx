@@ -1,9 +1,14 @@
 import { createClient } from '@/lib/supabase/server'
 import type { TastingNote, WineType } from '@/types/database'
-import { WINE_TYPE_COLOURS } from '@/types/database'
 import ScoreBadge from '@/components/ui/ScoreBadge'
 import StarRating from '@/components/ui/StarRating'
-import WineTypeBar from '@/components/ui/WineTypeBar'
+
+const WINE_TYPE_BAR_COLOURS: Record<WineType, string> = {
+  Red:       '#8b2035',
+  White:     '#d4c060',
+  Rosé:      '#e8a0b0',
+  Champagne: '#c8b860',
+}
 
 export default async function JournalPage({
   searchParams,
@@ -65,14 +70,13 @@ export default async function JournalPage({
       </form>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-px rounded-xl overflow-hidden border"
-           style={{ borderColor: '#d4b8aa' }}>
+      <div className="grid grid-cols-3 gap-2">
         {[
-          { label: 'Notes', value: notes.length },
-          { label: 'Avg score', value: avgScore ?? '—' },
-          { label: 'This year', value: thisYearCount },
+          { label: 'Notes',      value: notes.length },
+          { label: 'Avg score',  value: avgScore ?? '—' },
+          { label: 'This year',  value: thisYearCount },
         ].map(s => (
-          <div key={s.label} className="text-center py-3 px-2" style={{ background: '#ecddd4' }}>
+          <div key={s.label} className="text-center py-3 px-2 rounded-xl" style={{ background: '#ecddd4' }}>
             <div className="text-xl font-bold" style={{ color: '#3a1a20' }}>{s.value}</div>
             <div className="text-xs mt-0.5" style={{ color: '#a07060' }}>{s.label}</div>
           </div>
@@ -107,12 +111,14 @@ export default async function JournalPage({
 }
 
 function NoteCard({ note, rank }: { note: TastingNote; rank: number }) {
-  const isTop3 = rank <= 3
-  const allTags = [...note.nose_tags, ...note.palate_tags]
+  const isTop3    = rank <= 3
+  const allTags   = [...note.nose_tags, ...note.palate_tags]
+  const wineType  = (note.wine as { wine_type?: WineType } | undefined)?.wine_type
+  const barColour = wineType ? WINE_TYPE_BAR_COLOURS[wineType] : '#8b2035'
 
   return (
     <div className="rounded-xl overflow-hidden flex" style={{ background: '#ecddd4' }}>
-      <WineTypeBar type="Red" />
+      <div className="w-1 shrink-0" style={{ background: barColour }} />
       <div className="flex-1 px-3 py-3 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">

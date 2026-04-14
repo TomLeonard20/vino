@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import SignOutButton from './SignOutButton'
 import SharingSection from './SharingSection'
+import LanguageSelector from './LanguageSelector'
 
 export default async function ProfilePage() {
   const supabase = await createClient()
@@ -78,6 +79,9 @@ export default async function ProfilePage() {
         <div className="px-4 py-3 font-semibold text-sm border-b"
              style={{ background: '#ecddd4', borderColor: '#d4b8aa', color: '#3a1a20' }}>
           About
+        </div>
+        <div className="border-b" style={{ borderColor: '#d4b8aa' }}>
+          <LanguageSelector />
         </div>
         <div className="flex justify-between items-center px-4 py-3 border-b"
              style={{ background: '#f5ede6', borderColor: '#d4b8aa' }}>

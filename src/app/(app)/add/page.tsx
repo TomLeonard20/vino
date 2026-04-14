@@ -44,6 +44,7 @@ export default function AddWinePage() {
   const [grapes,        setGrapes]        = useState('')
   const [wineType,      setWineType]      = useState<WineType>('Red')
   const [purchasePrice, setPurchasePrice] = useState('')
+  const [purchaseDate,  setPurchaseDate]  = useState('')
   const [quantity,      setQuantity]      = useState('1')
 
   // Typeahead
