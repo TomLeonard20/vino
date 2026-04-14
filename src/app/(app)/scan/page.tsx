@@ -339,9 +339,13 @@ function WineConfirmSheet({
 }) {
   const [status,        setStatus]        = useState<'idle' | 'saving' | 'done'>('idle')
   const [wineType,      setWineType]      = useState<WineType>(wine.wineType ?? 'Red')
+  const [vintage,       setVintage]       = useState<string>(wine.vintage?.toString() ?? '')
   const [purchasePrice, setPurchasePrice] = useState('')
   const [purchaseDate,  setPurchaseDate]  = useState('')
   const supabase = createClient()
+
+  const NOW = new Date().getFullYear()
+  const YEARS = Array.from({ length: NOW - 1969 }, (_, i) => NOW - i)
 
   async function getCellarId(userId: string): Promise<string | null> {
     const { data } = await supabase
@@ -370,7 +374,7 @@ function WineConfirmSheet({
         producer:     wine.producer,
         region:       wine.region,
         appellation:  wine.country,
-        vintage:      wine.vintage,
+        vintage:      vintage ? parseInt(vintage) : wine.vintage,
         grapes:       wine.grapes,
         critic_score: wine.criticScore,
         db_source:    wine.source,
@@ -465,23 +469,36 @@ function WineConfirmSheet({
         )}
       </div>
 
-      {/* Wine type selector */}
-      <div className="px-3 pt-3">
-        <p className="text-xs mb-1.5" style={{ color: '#c4a090' }}>Wine type</p>
-        <div className="flex gap-1.5">
-          {WINE_TYPES.map(t => (
-            <button
-              key={t}
-              onClick={() => setWineType(t)}
-              className="flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors"
-              style={{
-                background: wineType === t ? '#8b2035' : 'rgba(255,255,255,0.08)',
-                color:      wineType === t ? 'white'   : '#c4a090',
-              }}
-            >
-              {t}
-            </button>
-          ))}
+      {/* Vintage + wine type */}
+      <div className="px-3 pt-3 flex gap-3">
+        {/* Vintage */}
+        <div className="flex-1">
+          <p className="text-xs mb-1.5" style={{ color: '#c4a090' }}>Vintage</p>
+          <select
+            value={vintage}
+            onChange={e => setVintage(e.target.value)}
+            className="w-full px-2 py-1.5 rounded-lg text-xs outline-none"
+            style={{ background: 'rgba(255,255,255,0.08)', color: vintage ? 'white' : '#c4a090', border: 'none' }}
+          >
+            <option value="">Unknown</option>
+            {YEARS.map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
+        {/* Wine type */}
+        <div className="flex-1">
+          <p className="text-xs mb-1.5" style={{ color: '#c4a090' }}>Wine type</p>
+          <select
+            value={wineType}
+            onChange={e => setWineType(e.target.value as WineType)}
+            className="w-full px-2 py-1.5 rounded-lg text-xs outline-none"
+            style={{ background: 'rgba(255,255,255,0.08)', color: 'white', border: 'none' }}
+          >
+            {WINE_TYPES.map(t => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
         </div>
       </div>
 
