@@ -175,29 +175,35 @@ export default function HomeClient({ name, totalBottles, drinkSoon, noteCount, a
       )}
 
       {/* ── Add a bottle ── */}
-      <div className="flex gap-2">
-        <a
-          href="/scan"
-          className="flex-1 flex items-center justify-center gap-2 rounded-xl py-4 text-white font-semibold"
-          style={{ background: '#8b2035' }}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
-            <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
-            <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
-            <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
-            <rect x="7" y="7" width="3" height="10"/>
-            <rect x="14" y="7" width="3" height="10"/>
-          </svg>
-          {t.addBottle}
-        </a>
-        <a
-          href="/add"
-          className="flex items-center justify-center gap-1.5 px-4 rounded-xl text-sm font-semibold border-2"
-          style={{ borderColor: '#8b2035', color: '#8b2035', background: 'transparent' }}
-        >
-          ✏️ Manual
-        </a>
+      <div className="rounded-xl p-4 space-y-3" style={{ background: '#ecddd4' }}>
+        <div className="flex items-center gap-2">
+          <span className="text-base">🍷</span>
+          <h3 className="font-semibold text-sm" style={{ color: '#3a1a20' }}>{t.addBottle}</h3>
+        </div>
+        <div className="flex gap-2">
+          <a
+            href="/scan"
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold text-white"
+            style={{ background: '#8b2035' }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
+              <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
+              <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
+              <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+              <rect x="7" y="7" width="3" height="10"/>
+              <rect x="14" y="7" width="3" height="10"/>
+            </svg>
+            Scan a bottle
+          </a>
+          <a
+            href="/add"
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold"
+            style={{ background: '#f5ede6', color: '#8b2035', border: '1.5px solid #8b2035' }}
+          >
+            ✏️ Add manually
+          </a>
+        </div>
       </div>
 
       {/* ── Pair my meal ── */}
