@@ -121,13 +121,22 @@ export default async function CellarPage({
       )}
 
       {/* Add bottle */}
-      <Link
-        href="/scan"
-        className="block w-full py-3 rounded-xl text-sm font-semibold text-center border"
-        style={{ borderColor: '#8b2035', color: '#8b2035', background: 'transparent' }}
-      >
-        + Add a bottle
-      </Link>
+      <div className="flex gap-2">
+        <Link
+          href="/scan"
+          className="flex-1 py-3 rounded-xl text-sm font-semibold text-center border"
+          style={{ borderColor: '#8b2035', color: '#8b2035', background: 'transparent' }}
+        >
+          📷 Scan label
+        </Link>
+        <Link
+          href="/add"
+          className="flex-1 py-3 rounded-xl text-sm font-semibold text-center border"
+          style={{ borderColor: '#8b2035', color: '#8b2035', background: 'transparent' }}
+        >
+          ✏️ Add manually
+        </Link>
+      </div>
     </div>
   )
 }

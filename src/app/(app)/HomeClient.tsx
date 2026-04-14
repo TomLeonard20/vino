@@ -175,21 +175,30 @@ export default function HomeClient({ name, totalBottles, drinkSoon, noteCount, a
       )}
 
       {/* ── Add a bottle ── */}
-      <a
-        href="/scan"
-        className="flex items-center justify-center gap-2 rounded-xl py-4 text-white font-semibold"
-        style={{ background: '#8b2035' }}
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
-          <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
-          <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
-          <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
-          <rect x="7" y="7" width="3" height="10"/>
-          <rect x="14" y="7" width="3" height="10"/>
-        </svg>
-        {t.addBottle}
-      </a>
+      <div className="flex gap-2">
+        <a
+          href="/scan"
+          className="flex-1 flex items-center justify-center gap-2 rounded-xl py-4 text-white font-semibold"
+          style={{ background: '#8b2035' }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
+            <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
+            <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
+            <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+            <rect x="7" y="7" width="3" height="10"/>
+            <rect x="14" y="7" width="3" height="10"/>
+          </svg>
+          {t.addBottle}
+        </a>
+        <a
+          href="/add"
+          className="flex items-center justify-center gap-1.5 px-4 rounded-xl text-sm font-semibold border-2"
+          style={{ borderColor: '#8b2035', color: '#8b2035', background: 'transparent' }}
+        >
+          ✏️ Manual
+        </a>
+      </div>
 
       {/* ── Pair my meal ── */}
       <div className="rounded-xl p-4 space-y-2" style={{ background: '#ecddd4' }}>

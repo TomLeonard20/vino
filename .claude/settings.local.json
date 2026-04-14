@@ -28,7 +28,8 @@
       "Bash(curl -sI \"https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-05-28/winemag-data-130k-v2.csv\")",
       "Bash(curl -sI \"https://raw.githubusercontent.com/nickhould/craft-beers-dataset/master/data/processed/beers.csv\")",
       "Bash(npx tsx:*)",
-      "Bash(python3 -m json.tool)"
+      "Bash(python3 -m json.tool)",
+      "Bash(npx tsc:*)"
     ]
   }
 }
