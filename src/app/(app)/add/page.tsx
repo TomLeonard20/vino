@@ -165,6 +165,7 @@ export default function AddWinePage() {
       drink_to:          drinkWindow?.drinkTo   ?? null,
       purchase_price:    purchasePrice ? parseFloat(purchasePrice) : null,
       purchase_currency: 'AUD',
+      purchase_date:     purchaseDate || null,
     })
 
     if (bottleErr) {
@@ -312,25 +313,34 @@ export default function AddWinePage() {
         </div>
       </div>
 
-      {/* ── Price ── */}
+      {/* ── Price + date ── */}
       <div>
         <p className="mb-1.5" style={labelStyle}>
-          Price <span style={{ color: '#c4a090', fontWeight: 400 }}>(optional)</span>
+          Purchase details <span style={{ color: '#c4a090', fontWeight: 400 }}>(optional)</span>
         </p>
-        <div className="flex items-center rounded-xl overflow-hidden border"
-             style={{ background: '#ecddd4', borderColor: '#d4b8aa' }}>
-          <span className="pl-3 text-sm" style={{ color: '#a07060' }}>A$</span>
+        <div className="space-y-2">
+          <div className="flex items-center rounded-xl overflow-hidden border"
+               style={{ background: '#ecddd4', borderColor: '#d4b8aa' }}>
+            <span className="pl-3 text-sm" style={{ color: '#a07060' }}>A$</span>
+            <input
+              type="number"
+              placeholder="0.00"
+              value={purchasePrice}
+              onChange={e => setPurchasePrice(e.target.value)}
+              className="flex-1 px-2 py-2.5 text-sm bg-transparent outline-none"
+              style={{ color: '#3a1a20' }}
+            />
+            {fromCat && purchasePrice && (
+              <span className="pr-3 text-xs" style={{ color: '#2e7d32' }}>catalogue</span>
+            )}
+          </div>
           <input
-            type="number"
-            placeholder="0.00"
-            value={purchasePrice}
-            onChange={e => setPurchasePrice(e.target.value)}
-            className="flex-1 px-2 py-2.5 text-sm bg-transparent outline-none"
-            style={{ color: '#3a1a20' }}
+            type="date"
+            value={purchaseDate}
+            onChange={e => setPurchaseDate(e.target.value)}
+            className="w-full px-3 py-2.5 rounded-xl text-sm border outline-none"
+            style={{ background: '#ecddd4', borderColor: '#d4b8aa', color: purchaseDate ? '#3a1a20' : '#a07060' }}
           />
-          {fromCat && purchasePrice && (
-            <span className="pr-3 text-xs" style={{ color: '#2e7d32' }}>catalogue</span>
-          )}
         </div>
       </div>
 
