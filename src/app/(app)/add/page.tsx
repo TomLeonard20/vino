@@ -33,7 +33,7 @@ const NOW = new Date().getFullYear()
 const YEARS = Array.from({ length: NOW - 1969 }, (_, i) => NOW - i)
 
 export default function AddWinePage() {
-  const router  = useRouter()
+  const router   = useRouter()
   const supabase = createClient()
 
   // Form fields
@@ -44,7 +44,6 @@ export default function AddWinePage() {
   const [grapes,        setGrapes]        = useState('')
   const [wineType,      setWineType]      = useState<WineType>('Red')
   const [purchasePrice, setPurchasePrice] = useState('')
-  const [purchaseDate,  setPurchaseDate]  = useState('')
   const [quantity,      setQuantity]      = useState('1')
 
   // Typeahead
@@ -52,15 +51,16 @@ export default function AddWinePage() {
   const [suggestions, setSuggestions] = useState<CatalogueWine[]>([])
   const [searching,   setSearching]   = useState(false)
   const [showDrop,    setShowDrop]    = useState(false)
-  const [fromCat,     setFromCat]     = useState(false) // filled from catalogue
+  const [fromCat,     setFromCat]     = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Drinking window
-  const [drinkWindow,   setDrinkWindow]   = useState<DrinkingWindowResult | null>(null)
-  const [estimating,    setEstimating]    = useState(false)
+  const [drinkWindow, setDrinkWindow] = useState<DrinkingWindowResult | null>(null)
+  const [estimating,  setEstimating]  = useState(false)
 
   // Save
-  const [status, setStatus] = useState<'idle' | 'saving' | 'done'>('idle')
+  const [status,    setStatus]    = useState<'idle' | 'saving' | 'done'>('idle')
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   // ── Typeahead search ───────────────────────────────────────────
   useEffect(() => {
@@ -92,7 +92,9 @@ export default function AddWinePage() {
     setQuery(w.title)
     setShowDrop(false)
     setFromCat(true)
-    setDrinkWindow(null) // reset so user can re-estimate for the chosen vintage
+    setDrinkWindow(null)
+    // Auto-fill price from catalogue if available
+    if (w.price_aud) setPurchasePrice(String(w.price_aud))
   }
 
   // ── Estimate drinking window ───────────────────────────────────
@@ -103,9 +105,7 @@ export default function AddWinePage() {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name,
-        producer,
-        region,
+        name, producer, region,
         vintage: vintage || null,
         grapes:  grapes ? [grapes] : [],
         wineType,
@@ -119,21 +119,20 @@ export default function AddWinePage() {
   async function save() {
     if (!name.trim()) return
     setStatus('saving')
+    setSaveError(null)
 
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    if (!user) { setStatus('idle'); return }
 
-    // Get cellar id
-    const { data: memberRow } = await supabase
-      .from('cellar_members')
-      .select('cellar_id')
-      .eq('user_id', user.id)
-      .order('joined_at', { ascending: true })
-      .limit(1)
-      .single()
-    const cellarId = memberRow?.cellar_id ?? null
+    // Get or create cellar via stored procedure (bypasses RLS)
+    const { data: cellarId, error: rpcErr } = await supabase.rpc('get_or_create_cellar')
+    if (rpcErr || !cellarId) {
+      setSaveError('Could not get your cellar. Please try again.')
+      setStatus('idle')
+      return
+    }
 
-    const { data: wineRow } = await supabase
+    const { data: wineRow, error: wineErr } = await supabase
       .from('wines')
       .insert({
         user_id:   user.id,
@@ -148,28 +147,37 @@ export default function AddWinePage() {
       .select()
       .single()
 
-    if (wineRow) {
-      await supabase.from('cellar_bottles').insert({
-        user_id:           user.id,
-        cellar_id:         cellarId,
-        added_by:          user.id,
-        wine_id:           wineRow.id,
-        wine_type:         wineType,
-        quantity:          parseInt(quantity) || 1,
-        drink_from:        drinkWindow?.drinkFrom ?? null,
-        peak:              drinkWindow?.peak      ?? null,
-        drink_to:          drinkWindow?.drinkTo   ?? null,
-        purchase_price:    purchasePrice ? parseFloat(purchasePrice) : null,
-        purchase_currency: 'AUD',
-        purchase_date:     purchaseDate || null,
-      })
+    if (wineErr || !wineRow) {
+      setSaveError(wineErr?.message ?? 'Failed to save wine.')
+      setStatus('idle')
+      return
+    }
+
+    const { error: bottleErr } = await supabase.from('cellar_bottles').insert({
+      user_id:           user.id,
+      cellar_id:         cellarId,
+      added_by:          user.id,
+      wine_id:           wineRow.id,
+      wine_type:         wineType,
+      quantity:          parseInt(quantity) || 1,
+      drink_from:        drinkWindow?.drinkFrom ?? null,
+      peak:              drinkWindow?.peak      ?? null,
+      drink_to:          drinkWindow?.drinkTo   ?? null,
+      purchase_price:    purchasePrice ? parseFloat(purchasePrice) : null,
+      purchase_currency: 'AUD',
+    })
+
+    if (bottleErr) {
+      setSaveError(bottleErr.message)
+      setStatus('idle')
+      return
     }
 
     setStatus('done')
     setTimeout(() => router.push('/cellar'), 800)
   }
 
-  const inputCls = "w-full px-3 py-2.5 rounded-xl text-sm border outline-none"
+  const inputCls   = "w-full px-3 py-2.5 rounded-xl text-sm border outline-none"
   const inputStyle = { background: '#ecddd4', borderColor: '#d4b8aa', color: '#3a1a20' }
   const labelStyle = { color: '#a07060', fontSize: 12, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.05em' }
 
@@ -194,16 +202,12 @@ export default function AddWinePage() {
             onFocus={() => suggestions.length > 0 && setShowDrop(true)}
             autoComplete="off"
           />
-
-          {/* Searching spinner */}
           {searching && (
             <div className="absolute right-3 top-1/2 -translate-y-1/2">
               <div className="w-4 h-4 border-2 rounded-full animate-spin"
                    style={{ borderColor: '#d4b8aa', borderTopColor: '#8b2035' }} />
             </div>
           )}
-
-          {/* Dropdown */}
           {showDrop && suggestions.length > 0 && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setShowDrop(false)} />
@@ -222,6 +226,7 @@ export default function AddWinePage() {
                       </p>
                       <p className="text-xs truncate mt-0.5" style={{ color: '#a07060' }}>
                         {[w.winery, w.region, w.vintage].filter(Boolean).join(' · ')}
+                        {w.price_aud ? ` · A$${w.price_aud}` : ''}
                       </p>
                     </div>
                     {w.points && (
@@ -237,71 +242,52 @@ export default function AddWinePage() {
           )}
         </div>
         {fromCat && (
-          <p className="text-xs mt-1" style={{ color: '#2e7d32' }}>
-            ✓ Auto-filled from wine catalogue
-          </p>
+          <p className="text-xs mt-1" style={{ color: '#2e7d32' }}>✓ Auto-filled from wine catalogue</p>
         )}
       </div>
 
       {/* ── Producer ── */}
       <div>
         <p className="mb-1.5" style={labelStyle}>Producer</p>
-        <input
-          className={inputCls} style={inputStyle}
+        <input className={inputCls} style={inputStyle}
           placeholder="e.g. Charles Heidsieck"
-          value={producer}
-          onChange={e => setProducer(e.target.value)}
-        />
+          value={producer} onChange={e => setProducer(e.target.value)} />
       </div>
 
       {/* ── Vintage ── */}
       <div>
         <p className="mb-1.5" style={labelStyle}>Vintage</p>
-        <select
-          className={inputCls} style={inputStyle}
+        <select className={inputCls} style={inputStyle}
           value={vintage}
-          onChange={e => setVintage(e.target.value ? parseInt(e.target.value) : '')}
-        >
+          onChange={e => setVintage(e.target.value ? parseInt(e.target.value) : '')}>
           <option value="">Unknown</option>
-          {YEARS.map(y => (
-            <option key={y} value={y}>{y}</option>
-          ))}
+          {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
       </div>
 
       {/* ── Region ── */}
       <div>
         <p className="mb-1.5" style={labelStyle}>Region</p>
-        <input
-          className={inputCls} style={inputStyle}
+        <input className={inputCls} style={inputStyle}
           placeholder="e.g. Champagne, Barossa Valley"
-          value={region}
-          onChange={e => setRegion(e.target.value)}
-        />
+          value={region} onChange={e => setRegion(e.target.value)} />
       </div>
 
       {/* ── Grape ── */}
       <div>
         <p className="mb-1.5" style={labelStyle}>Grape variety</p>
-        <input
-          className={inputCls} style={inputStyle}
+        <input className={inputCls} style={inputStyle}
           placeholder="e.g. Shiraz, Pinot Noir"
-          value={grapes}
-          onChange={e => setGrapes(e.target.value)}
-        />
-        {/* Quick-tap common grapes */}
+          value={grapes} onChange={e => setGrapes(e.target.value)} />
         <div className="flex flex-wrap gap-1.5 mt-2">
           {['Shiraz','Cabernet Sauvignon','Pinot Noir','Chardonnay','Sauvignon Blanc','Riesling','Merlot','Grenache','Nebbiolo','Sangiovese'].map(g => (
-            <button
-              key={g}
-              onClick={() => setGrapes(g)}
+            <button key={g} onClick={() => setGrapes(g)}
               className="px-2.5 py-1 rounded-full text-xs font-medium"
               style={{
                 background: grapes === g ? '#8b2035' : '#ecddd4',
                 color:      grapes === g ? 'white'   : '#a07060',
                 border:     '1px solid #d4b8aa',
-              }}
-            >
+              }}>
               {g}
             </button>
           ))}
@@ -313,44 +299,38 @@ export default function AddWinePage() {
         <p className="mb-1.5" style={labelStyle}>Wine type</p>
         <div className="flex gap-2">
           {WINE_TYPES.map(t => (
-            <button
-              key={t}
-              onClick={() => setWineType(t)}
+            <button key={t} onClick={() => setWineType(t)}
               className="flex-1 py-2 rounded-xl text-sm font-medium"
               style={{
                 background: wineType === t ? '#8b2035' : '#ecddd4',
                 color:      wineType === t ? 'white'   : '#a07060',
                 border:     '1px solid #d4b8aa',
-              }}
-            >
+              }}>
               {t}
             </button>
           ))}
         </div>
       </div>
 
-      {/* ── Purchase details ── */}
+      {/* ── Price ── */}
       <div>
-        <p className="mb-1.5" style={labelStyle}>Purchase details <span style={{ color: '#c4a090', fontWeight: 400 }}>(optional)</span></p>
-        <div className="flex gap-2">
-          <div className="flex-1 flex items-center rounded-xl overflow-hidden border" style={{ background: '#ecddd4', borderColor: '#d4b8aa' }}>
-            <span className="pl-3 text-sm" style={{ color: '#a07060' }}>A$</span>
-            <input
-              type="number"
-              placeholder="Price"
-              value={purchasePrice}
-              onChange={e => setPurchasePrice(e.target.value)}
-              className="flex-1 px-2 py-2.5 text-sm bg-transparent outline-none"
-              style={{ color: '#3a1a20' }}
-            />
-          </div>
+        <p className="mb-1.5" style={labelStyle}>
+          Price <span style={{ color: '#c4a090', fontWeight: 400 }}>(optional)</span>
+        </p>
+        <div className="flex items-center rounded-xl overflow-hidden border"
+             style={{ background: '#ecddd4', borderColor: '#d4b8aa' }}>
+          <span className="pl-3 text-sm" style={{ color: '#a07060' }}>A$</span>
           <input
-            type="date"
-            value={purchaseDate}
-            onChange={e => setPurchaseDate(e.target.value)}
-            className="flex-1 px-3 py-2.5 rounded-xl text-sm border outline-none"
-            style={{ background: '#ecddd4', borderColor: '#d4b8aa', color: purchaseDate ? '#3a1a20' : '#a07060' }}
+            type="number"
+            placeholder="0.00"
+            value={purchasePrice}
+            onChange={e => setPurchasePrice(e.target.value)}
+            className="flex-1 px-2 py-2.5 text-sm bg-transparent outline-none"
+            style={{ color: '#3a1a20' }}
           />
+          {fromCat && purchasePrice && (
+            <span className="pr-3 text-xs" style={{ color: '#2e7d32' }}>catalogue</span>
+          )}
         </div>
       </div>
 
@@ -361,14 +341,16 @@ export default function AddWinePage() {
           <button
             onClick={() => setQuantity(q => String(Math.max(1, parseInt(q) - 1)))}
             className="w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold"
-            style={{ background: '#ecddd4', color: '#3a1a20', border: '1px solid #d4b8aa' }}
-          >−</button>
+            style={{ background: '#ecddd4', color: '#3a1a20', border: '1px solid #d4b8aa' }}>
+            −
+          </button>
           <span className="text-2xl font-bold w-8 text-center" style={{ color: '#3a1a20' }}>{quantity}</span>
           <button
             onClick={() => setQuantity(q => String(parseInt(q) + 1))}
             className="w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold"
-            style={{ background: '#ecddd4', color: '#3a1a20', border: '1px solid #d4b8aa' }}
-          >+</button>
+            style={{ background: '#ecddd4', color: '#3a1a20', border: '1px solid #d4b8aa' }}>
+            +
+          </button>
         </div>
       </div>
 
@@ -395,13 +377,18 @@ export default function AddWinePage() {
           disabled={!name.trim() || estimating}
           className="w-full py-3 rounded-xl text-sm font-semibold border"
           style={{
-            borderColor: '#8b2035',
-            color:       '#8b2035',
-            opacity:     !name.trim() || estimating ? 0.5 : 1,
-          }}
-        >
+            borderColor: '#8b2035', color: '#8b2035',
+            opacity: !name.trim() || estimating ? 0.5 : 1,
+          }}>
           {estimating ? '✨ Estimating…' : '✨ Estimate drinking window with AI'}
         </button>
+      )}
+
+      {/* ── Error ── */}
+      {saveError && (
+        <p className="text-sm rounded-xl px-4 py-3" style={{ background: '#fce4ec', color: '#8b0000' }}>
+          ⚠ {saveError}
+        </p>
       )}
 
       {/* ── Save ── */}
@@ -416,9 +403,8 @@ export default function AddWinePage() {
           className="w-full py-3.5 rounded-xl text-sm font-semibold text-white"
           style={{
             background: '#8b2035',
-            opacity:    !name.trim() || status === 'saving' ? 0.5 : 1,
-          }}
-        >
+            opacity: !name.trim() || status === 'saving' ? 0.5 : 1,
+          }}>
           {status === 'saving' ? 'Saving…' : `Add ${quantity} bottle${parseInt(quantity) !== 1 ? 's' : ''} to cellar`}
         </button>
       )}
