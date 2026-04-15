@@ -499,26 +499,34 @@ function WineConfirmSheet({
         <p className="text-xs mb-1.5" style={{ color: '#c4a090' }}>
           Purchase details <span style={{ color: '#7a4a54' }}>(optional)</span>
         </p>
-        <div className="flex gap-2">
-          <div className="flex-1 flex items-center rounded-lg overflow-hidden"
-               style={{ background: 'rgba(255,255,255,0.08)' }}>
-            <span className="pl-2.5 text-xs" style={{ color: '#c4a090' }}>{currency}</span>
+        <div className="grid grid-cols-2 gap-2">
+          {/* Price */}
+          <div>
+            <p className="text-xs mb-1" style={{ color: '#7a4a54' }}>Price</p>
+            <div className="flex items-center rounded-lg overflow-hidden"
+                 style={{ background: 'rgba(255,255,255,0.08)' }}>
+              <span className="pl-2.5 text-xs" style={{ color: '#c4a090' }}>{currency}</span>
+              <input
+                type="number"
+                placeholder="0.00"
+                value={purchasePrice}
+                onChange={e => setPurchasePrice(e.target.value)}
+                className="flex-1 px-2 py-2 text-sm bg-transparent outline-none"
+                style={{ color: 'white' }}
+              />
+            </div>
+          </div>
+          {/* Purchase date */}
+          <div>
+            <p className="text-xs mb-1" style={{ color: '#7a4a54' }}>Purchase date</p>
             <input
-              type="number"
-              placeholder="Price"
-              value={purchasePrice}
-              onChange={e => setPurchasePrice(e.target.value)}
-              className="flex-1 px-2 py-2 text-sm bg-transparent outline-none"
-              style={{ color: 'white' }}
+              type="date"
+              value={purchaseDate}
+              onChange={e => setPurchaseDate(e.target.value)}
+              className="w-full px-2.5 py-2 rounded-lg text-sm outline-none"
+              style={{ background: 'rgba(255,255,255,0.08)', color: 'white' }}
             />
           </div>
-          <input
-            type="date"
-            value={purchaseDate}
-            onChange={e => setPurchaseDate(e.target.value)}
-            className="flex-1 px-2.5 py-2 rounded-lg text-sm outline-none"
-            style={{ background: 'rgba(255,255,255,0.08)', color: purchaseDate ? 'white' : '#7a4a54' }}
-          />
         </div>
       </div>
 
