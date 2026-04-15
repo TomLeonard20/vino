@@ -79,7 +79,7 @@ export async function POST(request: Request) {
     // Haiku is ~4× faster than Sonnet for structured extraction tasks
     const message = await client.messages.create({
       model:      'claude-haiku-4-5',
-      max_tokens: 512,
+      max_tokens: 256,
       messages: [
         {
           role: 'user',
@@ -90,29 +90,9 @@ export async function POST(request: Request) {
             },
             {
               type: 'text',
-              text: `Read this wine label and return ONLY a raw JSON object — no markdown, no explanation:
-{
-  "name": "full wine name",
-  "producer": "winery name",
-  "region": "appellation or region",
-  "vintage": 2019,
-  "grapes": ["Cabernet Sauvignon"],
-  "wineType": "Red",
-  "drinkFrom": ${CURRENT_YEAR},
-  "peak": ${CURRENT_YEAR + 5},
-  "drinkTo": ${CURRENT_YEAR + 10},
-  "drinkRationale": "one short sentence, max 80 chars",
-  "unreadable": false
-}
-
-Rules:
-- vintage: 4-digit integer or null
-- wineType: exactly one of Red, White, Rosé, Champagne, Sparkling, Dessert
-- grapes: array of strings, [] if not on label
-- drinkFrom/peak/drinkTo: integers — estimate based on wine style, region, vintage
-- drinkRationale: one sentence explaining the window (max 80 chars)
-- If not a wine label, set "unreadable": true
-- Raw JSON only — no code blocks`,
+              text: `Wine label → raw JSON only, no markdown:
+{"name":"","producer":"","region":"","vintage":2020,"grapes":[],"wineType":"Red","drinkFrom":${CURRENT_YEAR},"peak":${CURRENT_YEAR + 3},"drinkTo":${CURRENT_YEAR + 8},"drinkRationale":"<80 chars","unreadable":false}
+wineType: Red|White|Rosé|Champagne|Sparkling|Dessert. vintage: int or null. Set unreadable:true if not a wine label.`,
             },
           ],
         },

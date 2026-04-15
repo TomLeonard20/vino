@@ -20,7 +20,13 @@ export default function LabelScanner({ onCapture, active }: Props) {
     setCamState('starting')
 
     navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: 'environment' } })
+      .getUserMedia({
+        video: {
+          facingMode: 'environment',
+          width:  { ideal: 1280 },   // cap at 720p — plenty for label text
+          height: { ideal: 720 },
+        },
+      })
       .then(stream => {
         streamRef.current = stream
         const video = videoRef.current
@@ -54,17 +60,17 @@ export default function LabelScanner({ onCapture, active }: Props) {
       return
     }
 
-    // 800px is plenty for reading label text; smaller = faster upload + faster API
-    const MAX   = 800
+    // 640px is plenty for reading label text — smaller = faster upload & faster API
+    const MAX   = 640
     const scale = video.videoWidth > MAX ? MAX / video.videoWidth : 1
-    const w     = Math.round((video.videoWidth  || 800) * scale)
-    const h     = Math.round((video.videoHeight || 600) * scale)
+    const w     = Math.round((video.videoWidth  || 640) * scale)
+    const h     = Math.round((video.videoHeight || 480) * scale)
 
     const canvas = document.createElement('canvas')
     canvas.width  = w
     canvas.height = h
     canvas.getContext('2d')!.drawImage(video, 0, 0, w, h)
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.75)   // 0.75 quality — still crisp for text
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.65)   // 0.65 quality — crisp for text, ~40% smaller
     onCapture(dataUrl)
   }
 
