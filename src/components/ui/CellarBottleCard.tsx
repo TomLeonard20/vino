@@ -87,7 +87,7 @@ export default function CellarBottleCard({
 
         {/* Row 2: vintage + grape mini-cells + peak status + partner badge */}
         <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-          {wine?.vintage     && <MiniCell label="Vintage" value={String(wine.vintage)} />}
+          <MiniCell label="Vintage" value={wine?.vintage ? String(wine.vintage) : '—'} />
           {wine?.grapes?.[0] && <MiniCell label="Grape"   value={wine.grapes[0]} />}
           {isPartnerBottle   && (
             <span className="text-xs px-1.5 py-0.5 rounded font-medium"
