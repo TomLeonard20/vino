@@ -94,8 +94,6 @@ export default function AddWinePage() {
     setShowDrop(false)
     setFromCat(true)
     setDrinkWindow(null)
-    // Auto-fill price from catalogue if available
-    if (w.price_aud) setPurchasePrice(String(w.price_aud))
   }
 
   // ── Estimate drinking window ───────────────────────────────────
@@ -335,13 +333,19 @@ export default function AddWinePage() {
               <span className="pr-3 text-xs" style={{ color: '#2e7d32' }}>catalogue</span>
             )}
           </div>
-          <input
-            type="date"
-            value={purchaseDate}
-            onChange={e => setPurchaseDate(e.target.value)}
-            className="w-full px-3 py-2.5 rounded-xl text-sm border outline-none"
-            style={{ background: '#ecddd4', borderColor: '#d4b8aa', color: purchaseDate ? '#3a1a20' : '#a07060' }}
-          />
+          <div className="relative">
+            {!purchaseDate && (
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm pointer-events-none"
+                    style={{ color: '#a07060' }}>Purchase date</span>
+            )}
+            <input
+              type="date"
+              value={purchaseDate}
+              onChange={e => setPurchaseDate(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-xl text-sm border outline-none"
+              style={{ background: '#ecddd4', borderColor: '#d4b8aa', color: purchaseDate ? '#3a1a20' : 'transparent' }}
+            />
+          </div>
         </div>
       </div>
 
