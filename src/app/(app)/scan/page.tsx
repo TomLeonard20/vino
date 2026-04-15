@@ -31,6 +31,11 @@ interface ScannedWine {
   drinkRationale?: string
 }
 
+/** Strip embedded vintage years from a wine name — vintage is stored separately */
+function cleanWineName(title: string): string {
+  return title.replace(/\b(19|20)\d{2}\b/g, '').replace(/\s+/g, ' ').trim()
+}
+
 // Currency symbol → ISO code mapping
 const CURRENCY_CODES: Record<string, string> = {
   'A$': 'AUD', '$': 'USD', '£': 'GBP', '€': 'EUR',
@@ -353,7 +358,7 @@ function WineConfirmSheet({
       .insert({
         user_id:      user.id,
         cellar_id:    cellarId,
-        name:         wine.name,
+        name:         cleanWineName(wine.name),
         producer:     wine.producer,
         region:       wine.region,
         appellation:  wine.country,
@@ -647,7 +652,7 @@ function ManualEntrySheet({ onDone, onCancel }: { onDone: () => void; onCancel: 
     const { data: wineRow } = await supabase.from('wines').insert({
       user_id:   user.id,
       cellar_id: cellarId,
-      name:      name.trim(),
+      name:      cleanWineName(name.trim()),
       producer:  producer.trim(),
       region:    region.trim(),
       vintage:   vintage ? parseInt(vintage) : null,

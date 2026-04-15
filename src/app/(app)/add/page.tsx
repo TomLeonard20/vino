@@ -32,6 +32,11 @@ function detectWineType(grapes: string[], name: string, region: string): WineTyp
 const NOW = new Date().getFullYear()
 const YEARS = Array.from({ length: NOW - 1969 }, (_, i) => NOW - i)
 
+/** Strip embedded vintage years from a wine name — vintage is stored separately */
+function cleanWineName(title: string): string {
+  return title.replace(/\b(19|20)\d{2}\b/g, '').replace(/\s+/g, ' ').trim()
+}
+
 export default function AddWinePage() {
   const router   = useRouter()
   const supabase = createClient()
@@ -84,13 +89,14 @@ export default function AddWinePage() {
     const grapeList = w.variety ? [w.variety] : []
     const detected  = detectWineType(grapeList, w.title, w.region ?? '')
 
-    setName(w.title)
+    const cleanName = cleanWineName(w.title)
+    setName(cleanName)
     setProducer(w.winery ?? '')
     setRegion(w.region ?? w.province ?? '')
     setGrapes(w.variety ?? '')
     setVintage(w.vintage ?? '')
     setWineType(detected)
-    setQuery(w.title)
+    setQuery(cleanName)
     setShowDrop(false)
     setFromCat(true)
     setDrinkWindow(null)
@@ -136,7 +142,7 @@ export default function AddWinePage() {
       .insert({
         user_id:   user.id,
         cellar_id: cellarId,
-        name:      name.trim(),
+        name:      cleanWineName(name.trim()),
         producer:  producer.trim(),
         region:    region.trim(),
         vintage:   vintage || null,
