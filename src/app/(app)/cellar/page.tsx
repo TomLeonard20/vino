@@ -35,9 +35,10 @@ const PenIcon = () => (
 export default async function CellarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ type?: string; cellar?: string; sort?: string }>
+  searchParams: Promise<{ type?: string; cellar?: string; sort?: string; ready?: string }>
 }) {
-  const { type: filterType, cellar: cellarParam, sort } = await searchParams
+  const { type: filterType, cellar: cellarParam, sort, ready } = await searchParams
+  const filterReady = ready === '1'
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -91,9 +92,13 @@ export default async function CellarPage({
   const { data } = await query
   const allBottles = (data ?? []) as CellarBottle[]
 
-  const filtered = filterType && filterType !== 'All'
-    ? allBottles.filter(b => b.wine_type === filterType)
-    : allBottles
+  const DRINK_SOON_STATUSES = ['Drink now', 'At peak', 'Open soon']
+
+  const filtered = filterReady
+    ? allBottles.filter(b => DRINK_SOON_STATUSES.includes(drinkingStatus(b)))
+    : filterType && filterType !== 'All'
+      ? allBottles.filter(b => b.wine_type === filterType)
+      : allBottles
 
   // Sort: default desc (highest score first); ?sort=asc flips it
   const sortAsc = sort === 'asc'
@@ -123,9 +128,18 @@ export default async function CellarPage({
     const p = new URLSearchParams()
     if (filterType && filterType !== 'All') p.set('type', filterType)
     if (activeCellarId) p.set('cellar', activeCellarId)
+    if (filterReady) p.set('ready', '1')
     p.set('sort', dir)
     return `/cellar?${p.toString()}`
   }
+
+  // Href for the drink-soon banner
+  const drinkSoonHref = (() => {
+    const p = new URLSearchParams()
+    if (activeCellarId) p.set('cellar', activeCellarId)
+    p.set('ready', '1')
+    return `/cellar?${p.toString()}`
+  })()
 
   return (
     <div className="space-y-5 pb-28">
@@ -157,27 +171,38 @@ export default async function CellarPage({
 
       {/* ── Drink-soon banner ── */}
       {drinkSoon > 0 && (
-        <div className="rounded-xl px-4 py-3 flex items-start gap-3" style={{ background: '#8b2035' }}>
+        <Link href={drinkSoonHref}
+              className="rounded-xl px-4 py-3 flex items-center gap-3 active:opacity-80 transition-opacity"
+              style={{ background: '#8b2035' }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white"
-               strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5">
+               strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
             <circle cx="12" cy="12" r="10"/>
             <line x1="12" y1="8" x2="12" y2="12"/>
             <line x1="12" y1="16" x2="12.01" y2="16"/>
           </svg>
-          <div>
+          <div className="flex-1">
             <p className="text-sm font-semibold text-white">
               {drinkSoon} {drinkSoon === 1 ? 'bottle is' : 'bottles are'} ready to drink
             </p>
             <p className="text-xs mt-0.5" style={{ color: '#f5c6cc' }}>
-              Open now before the window passes
+              Tap to see them →
             </p>
           </div>
-        </div>
+        </Link>
       )}
 
       {/* ── Type filter tabs ── */}
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {(['All', ...WINE_TYPES] as const).map(type => {
+        {/* Ready-to-drink active chip — shown when banner was tapped */}
+        {filterReady && (
+          <a href={`/cellar${activeCellarId ? `?cellar=${activeCellarId}` : ''}`}
+             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap border"
+             style={{ background: '#8b2035', color: 'white', borderColor: '#8b2035' }}>
+            🍷 Ready to drink
+            <span className="opacity-70 text-xs">✕</span>
+          </a>
+        )}
+        {!filterReady && (['All', ...WINE_TYPES] as const).map(type => {
           const count  = type === 'All'
             ? allBottles.reduce((s, b) => s + b.quantity, 0)
             : allBottles.filter(b => b.wine_type === type).reduce((s, b) => s + b.quantity, 0)
@@ -210,9 +235,11 @@ export default async function CellarPage({
       {grouped.length === 0 ? (
         <div className="text-center py-12 space-y-4">
           <p className="text-sm" style={{ color: '#c4a090' }}>
-            {filterType && filterType !== 'All'
-              ? `No ${groupLabel(filterType)} in your cellar yet.`
-              : 'Your cellar is empty. Add your first wine!'}
+            {filterReady
+              ? 'No bottles are ready to drink right now.'
+              : filterType && filterType !== 'All'
+                ? `No ${groupLabel(filterType)} in your cellar yet.`
+                : 'Your cellar is empty. Add your first wine!'}
           </p>
           <div className="flex gap-2 justify-center">
             <Link href="/scan"
