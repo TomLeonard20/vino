@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { CellarBottle } from '@/types/database'
 import WineTypeBar from '@/components/ui/WineTypeBar'
+import Link from 'next/link'
 
 interface BottleRanking {
   bottleId: string
@@ -28,25 +29,29 @@ const CONFIDENCE_STYLES = {
   Adventurous: { background: 'rgba(139,32,53,0.1)',   color: '#8b2035' },
 }
 
-// Score → colour
 function scoreColor(pct: number) {
   if (pct >= 80) return '#2e5c30'
   if (pct >= 60) return '#7a4e00'
   return '#c4a090'
 }
 
-export default function PairingClient({ initialMeal }: { initialMeal: string }) {
-  const [meal,       setMeal]       = useState(initialMeal)
-  const [bottles,    setBottles]    = useState<CellarBottle[]>([])
-  const [result,     setResult]     = useState<PairingResult | null>(null)
-  const [loading,    setLoading]    = useState(false)
-  const [error,      setError]      = useState('')
-  const [showAll,    setShowAll]    = useState(false)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [history,    setHistory]    = useState<Array<{ meal: string; result: PairingResult; ts: number }>>([])
+// Top-ranked wine from a result set
+function topMatch(result: PairingResult): { name: string; score: number } | null {
+  if (!result.cellarRankings.length) return null
+  const top = [...result.cellarRankings].sort((a, b) => b.score - a.score)[0]
+  return { name: top.bottleId, score: top.score }
+}
 
-  const supabase = createClient()
-  // Track whether we've auto-triggered from the URL param
+export default function PairingClient({ initialMeal }: { initialMeal: string }) {
+  const [meal,    setMeal]    = useState(initialMeal)
+  const [bottles, setBottles] = useState<CellarBottle[]>([])
+  const [result,  setResult]  = useState<PairingResult | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState('')
+  const [showAll, setShowAll] = useState(false)
+  const [history, setHistory] = useState<Array<{ meal: string; result: PairingResult; ts: number }>>([])
+
+  const supabase  = createClient()
   const autoFired = useRef(false)
 
   // Load cellar bottles + pairing history
@@ -62,11 +67,9 @@ export default function PairingClient({ initialMeal }: { initialMeal: string }) 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Auto-run when arriving from the home page with ?meal=...
-  // Fires once bottles have loaded (or after a short grace period)
+  // Auto-run when arriving from home with ?meal=…
   useEffect(() => {
     if (!initialMeal.trim() || autoFired.current) return
-    // Small delay so bottles have time to load, then fire regardless
     const timer = setTimeout(() => {
       if (!autoFired.current) {
         autoFired.current = true
@@ -85,12 +88,12 @@ export default function PairingClient({ initialMeal }: { initialMeal: string }) 
     setShowAll(false)
 
     const snapshots = currentBottles.map(b => ({
-      bottleId:      b.id,
-      wineName:      b.wine?.name ?? '',
-      producer:      b.wine?.producer ?? '',
-      vintage:       b.wine?.vintage ?? null,
-      wineType:      b.wine_type,
-      criticScore:   b.wine?.critic_score ?? null,
+      bottleId:       b.id,
+      wineName:       b.wine?.name ?? '',
+      producer:       b.wine?.producer ?? '',
+      vintage:        b.wine?.vintage ?? null,
+      wineType:       b.wine_type,
+      criticScore:    b.wine?.critic_score ?? null,
       flavourProfile: b.wine?.flavour_profile ?? null,
     }))
 
@@ -103,7 +106,8 @@ export default function PairingClient({ initialMeal }: { initialMeal: string }) 
       if (!res.ok) throw new Error(await res.text())
       const data: PairingResult = await res.json()
       setResult(data)
-      // Save to history (deduped by meal text, max 5)
+
+      // Save to history — deduped by meal text, max 5 entries
       setHistory(prev => {
         const updated = [
           { meal: mealText, result: data, ts: Date.now() },
@@ -134,6 +138,9 @@ export default function PairingClient({ initialMeal }: { initialMeal: string }) 
 
   const displayed = showAll ? ranked : ranked.slice(0, 5)
   const styles    = result?.idealStyles ?? []
+
+  // Meal label truncated for headings
+  const mealLabel = meal.length > 28 ? `${meal.slice(0, 28)}…` : meal
 
   return (
     <div className="space-y-5 pb-4">
@@ -193,23 +200,34 @@ export default function PairingClient({ initialMeal }: { initialMeal: string }) 
              style={{ color: '#b09080', letterSpacing: '0.15em' }}>
             Recent pairings
           </p>
-          {history.map((h, i) => (
-            <button
-              key={i}
-              onClick={() => { setMeal(h.meal); setResult(h.result); setExpandedId(null) }}
-              className="w-full flex items-center justify-between gap-2 px-4 py-3 rounded-xl text-left active:opacity-70 transition-opacity"
-              style={{ background: '#ecddd4' }}
-            >
-              <div className="min-w-0">
-                <p className="font-semibold text-sm truncate" style={{ color: '#3a1a20' }}>{h.meal}</p>
-                <p className="text-xs" style={{ color: '#a07060' }}>
-                  {new Date(h.ts).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
-                  {' · '}{h.result.cellarRankings.length} wines ranked
-                </p>
-              </div>
-              <span className="text-sm shrink-0" style={{ color: '#c4a090' }}>›</span>
-            </button>
-          ))}
+          {history.map((h, i) => {
+            const sorted  = [...h.result.cellarRankings].sort((a, b) => b.score - a.score)
+            const topRank = sorted[0]
+            // Resolve wine name from current bottles list (may not be loaded yet — fall back gracefully)
+            const topWineName = bottles.find(b => b.id === topRank?.bottleId)?.wine?.name ?? null
+            return (
+              <button
+                key={i}
+                onClick={() => { setMeal(h.meal); setResult(h.result) }}
+                className="w-full flex items-center justify-between gap-2 px-4 py-3 rounded-xl text-left active:opacity-70 transition-opacity"
+                style={{ background: '#ecddd4' }}
+              >
+                <div className="min-w-0">
+                  <p className="font-semibold text-sm truncate" style={{ color: '#3a1a20' }}>{h.meal}</p>
+                  <p className="text-xs mt-0.5" style={{ color: '#a07060' }}>
+                    {new Date(h.ts).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                    {' · '}{h.result.cellarRankings.length} wines ranked
+                  </p>
+                  {topRank && topWineName && (
+                    <p className="text-xs mt-0.5 truncate" style={{ color: '#8b2035' }}>
+                      Top match: {topWineName} · {topRank.score}%
+                    </p>
+                  )}
+                </div>
+                <span className="text-sm shrink-0" style={{ color: '#c4a090' }}>›</span>
+              </button>
+            )
+          })}
         </section>
       )}
 
@@ -218,59 +236,60 @@ export default function PairingClient({ initialMeal }: { initialMeal: string }) 
         <div className="flex flex-col items-center gap-3 py-10">
           <div className="w-6 h-6 border-2 rounded-full animate-spin"
                style={{ borderColor: '#d4b8aa', borderTopColor: '#8b2035' }} />
-          <p className="text-sm" style={{ color: '#a07060' }}>Pairing your cellar…</p>
+          <p className="text-sm text-center px-4" style={{ color: '#a07060' }}>
+            Matching your cellar to &ldquo;{meal}&rdquo;…
+          </p>
         </div>
       )}
 
-      {/* ── Your cellar matches ── */}
+      {/* ── Cellar matches ── */}
       {ranked.length > 0 && (
         <section className="space-y-3">
           <h3 className="font-semibold" style={{ color: '#3a1a20' }}>
-            Your cellar
+            For {mealLabel}
             <span className="ml-2 text-xs font-normal" style={{ color: '#a07060' }}>
               {ranked.length} bottle{ranked.length !== 1 ? 's' : ''} ranked
             </span>
           </h3>
 
           {displayed.map(({ ranking, bottle }, idx) => {
-            const pct     = ranking!.score
-            const color   = scoreColor(pct)
-            const isOpen  = expandedId === ranking!.bottleId
-            const wine    = bottle!.wine as { name?: string; grapes?: string[]; vintage?: number | null } | undefined
+            const pct      = ranking!.score
+            const color    = scoreColor(pct)
+            const rankNum  = idx + 1
+            const rankColor = rankNum <= 3 ? '#8b2035' : '#c4a090'
+            const wine     = bottle!.wine as { name?: string; grapes?: string[]; vintage?: number | null } | undefined
             const subtitle = [wine?.grapes?.[0], wine?.vintage, `×${bottle!.quantity}`].filter(Boolean).join(' · ')
             return (
               <div
                 key={ranking!.bottleId}
-                className="rounded-xl overflow-hidden cursor-pointer active:opacity-80 transition-opacity"
+                className="rounded-xl overflow-hidden"
                 style={{ background: '#ecddd4' }}
-                onClick={() => setExpandedId(id => id === ranking!.bottleId ? null : ranking!.bottleId)}
               >
                 <div className="flex">
                   <WineTypeBar type={bottle!.wine_type} />
                   <div className="flex-1 px-3 py-3 flex items-start gap-3">
-                    <span className="text-xs font-bold mt-0.5 w-5 shrink-0" style={{ color: '#c4a090' }}>
-                      {idx + 1}
+                    <span className="text-xs font-bold mt-0.5 w-5 shrink-0"
+                          style={{ color: rankColor }}>
+                      {rankNum}
                     </span>
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-sm truncate" style={{ color: '#3a1a20' }}>
                         {wine?.name ?? 'Unknown'}
                       </p>
                       <p className="text-xs" style={{ color: '#a07060' }}>{subtitle}</p>
-                      {/* Reason — only when expanded */}
-                      {isOpen && (
-                        <p className="text-xs mt-1.5 leading-relaxed" style={{ color: '#7a4a38' }}>
-                          {ranking!.reason}
-                        </p>
-                      )}
+                      {/* Reason always visible */}
+                      <p className="text-xs mt-1.5 leading-relaxed" style={{ color: '#7a4a38' }}>
+                        {ranking!.reason}
+                      </p>
                       {/* Score bar */}
-                      <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.1)' }}>
+                      <div className="mt-2 h-1.5 rounded-full overflow-hidden"
+                           style={{ background: 'rgba(0,0,0,0.1)' }}>
                         <div className="h-full rounded-full transition-all duration-700"
                              style={{ width: `${pct}%`, background: color }} />
                       </div>
                     </div>
-                    <div className="shrink-0 flex flex-col items-end gap-1">
+                    <div className="shrink-0 text-right">
                       <span className="text-sm font-bold" style={{ color }}>{pct}%</span>
-                      <span className="text-xs" style={{ color: '#c4a090' }}>{isOpen ? '▲' : '▼'}</span>
                     </div>
                   </div>
                 </div>
@@ -288,27 +307,34 @@ export default function PairingClient({ initialMeal }: { initialMeal: string }) 
         </section>
       )}
 
-      {/* ── No cellar bottles (but we have results) ── */}
+      {/* ── Empty cellar state ── */}
       {result && ranked.length === 0 && (
-        <div className="rounded-xl p-4 text-center space-y-1" style={{ background: '#ecddd4' }}>
+        <div className="rounded-xl p-4 text-center space-y-3" style={{ background: '#ecddd4' }}>
           <p className="text-sm font-medium" style={{ color: '#3a1a20' }}>Your cellar is empty</p>
           <p className="text-xs" style={{ color: '#a07060' }}>
             Add bottles to get personalised rankings from your collection.
           </p>
+          <Link
+            href="/scan"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold"
+            style={{ color: '#8b2035' }}
+          >
+            Add your first bottle →
+          </Link>
         </div>
       )}
 
       {/* ── Ideal styles ── */}
       {styles.length > 0 && (
         <section className="space-y-3">
-          <h3 className="font-semibold" style={{ color: '#3a1a20' }}>Best wine styles</h3>
+          <h3 className="font-semibold" style={{ color: '#3a1a20' }}>Ideal styles</h3>
           {[...styles].sort((a, b) => b.score - a.score).map(style => {
             const cs    = CONFIDENCE_STYLES[style.confidence]
             const color = scoreColor(style.score)
             return (
               <div key={style.name} className="rounded-xl overflow-hidden"
                    style={{ background: '#ecddd4' }}>
-                <div className="px-4 pt-3 pb-2">
+                <div className="px-4 pt-3 pb-3">
                   <div className="flex items-center justify-between gap-2 mb-1">
                     <span className="font-semibold text-sm" style={{ color: '#3a1a20' }}>
                       {style.name}
@@ -317,13 +343,10 @@ export default function PairingClient({ initialMeal }: { initialMeal: string }) 
                       <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={cs}>
                         {style.confidence}
                       </span>
-                      <span className="text-sm font-bold" style={{ color }}>
-                        {style.score}%
-                      </span>
+                      <span className="text-sm font-bold" style={{ color }}>{style.score}%</span>
                     </div>
                   </div>
                   <p className="text-xs" style={{ color: '#a07060' }}>{style.why}</p>
-                  {/* Score bar */}
                   <div className="mt-2 h-1.5 rounded-full overflow-hidden"
                        style={{ background: 'rgba(0,0,0,0.1)' }}>
                     <div className="h-full rounded-full transition-all duration-700"
@@ -336,7 +359,7 @@ export default function PairingClient({ initialMeal }: { initialMeal: string }) 
         </section>
       )}
 
-      {/* ── Empty state ── */}
+      {/* ── Idle empty state ── */}
       {!loading && !result && (
         <p className="text-sm text-center py-8" style={{ color: '#c4a090' }}>
           Enter what you&apos;re eating and tap Match to get pairing suggestions.
