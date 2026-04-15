@@ -128,7 +128,7 @@ export default async function CellarPage({
   }
 
   return (
-    <div className="space-y-5 pb-4">
+    <div className="space-y-5 pb-28">
 
       {/* ── Cellar switcher header ── */}
       <div className="flex items-center justify-between">

@@ -91,20 +91,29 @@ export default function HomeClient({ name, totalBottles, drinkSoon, noteCount, a
 
       {/* ── Stats row — individual cards ── */}
       <div className="grid grid-cols-3 gap-2">
-        {[
-          { label: t.bottles,      value: totalBottles },
-          { label: t.tastingNotes, value: noteCount },
-          { label: t.drinkSoon,    value: drinkSoon, highlight: drinkSoon > 0 },
-        ].map(s => (
-          <div key={s.label} className="text-center py-4 px-2 rounded-xl"
-               style={{ background: '#ecddd4' }}>
-            <div className="text-2xl font-bold"
-                 style={{ color: 'highlight' in s && s.highlight ? '#8b2035' : '#3a1a20' }}>
-              {s.value}
-            </div>
-            <div className="text-xs mt-0.5" style={{ color: '#a07060' }}>{s.label}</div>
+        {/* Bottles → cellar */}
+        <Link href="/cellar" className="text-center py-4 px-2 rounded-xl active:opacity-70 transition-opacity"
+              style={{ background: '#ecddd4' }}>
+          <div className="text-2xl font-bold" style={{ color: '#3a1a20' }}>{totalBottles}</div>
+          <div className="text-xs mt-0.5" style={{ color: '#a07060' }}>{t.bottles}</div>
+        </Link>
+
+        {/* Tasting notes → journal */}
+        <Link href="/journal" className="text-center py-4 px-2 rounded-xl active:opacity-70 transition-opacity"
+              style={{ background: '#ecddd4' }}>
+          <div className="text-2xl font-bold" style={{ color: '#3a1a20' }}>{noteCount}</div>
+          <div className="text-xs mt-0.5" style={{ color: '#a07060' }}>{t.tastingNotes}</div>
+        </Link>
+
+        {/* Drink soon → cellar (no filter needed — drink-soon banner handles it) */}
+        <Link href="/cellar" className="text-center py-4 px-2 rounded-xl active:opacity-70 transition-opacity"
+              style={{ background: '#ecddd4' }}>
+          <div className="text-2xl font-bold"
+               style={{ color: drinkSoon > 0 ? '#8b2035' : '#3a1a20' }}>
+            {drinkSoon}
           </div>
-        ))}
+          <div className="text-xs mt-0.5" style={{ color: '#a07060' }}>{t.drinkSoon}</div>
+        </Link>
       </div>
 
       {/* ── Cellar balance chart ── */}
