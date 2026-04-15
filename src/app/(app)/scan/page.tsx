@@ -301,6 +301,7 @@ function WineConfirmSheet({
   const supabase = createClient()
 
   const [status,          setStatus]          = useState<'idle' | 'saving' | 'done'>('idle')
+  const [saveError,       setSaveError]       = useState<string | null>(null)
   const [wineType,        setWineType]        = useState<WineType>(wine.wineType ?? 'Red')
   const [vintage,         setVintage]         = useState<string>(wine.vintage?.toString() ?? '')
   const [purchasePrice,   setPurchasePrice]   = useState('')
@@ -333,23 +334,19 @@ function WineConfirmSheet({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wine.name])
 
-  async function getCellarId(userId: string): Promise<string | null> {
-    const { data } = await supabase
-      .from('cellar_members')
-      .select('cellar_id')
-      .eq('user_id', userId)
-      .order('joined_at', { ascending: true })
-      .limit(1)
-      .single()
-    return data?.cellar_id ?? null
-  }
-
   async function save(action: 'cellar' | 'note' | 'both') {
     setStatus('saving')
+    setSaveError(null)
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    if (!user) { setStatus('idle'); return }
 
-    const cellarId = await getCellarId(user.id)
+    // Use RPC to bypass RLS — same approach as /add page
+    const { data: cellarId, error: rpcErr } = await supabase.rpc('get_or_create_cellar')
+    if (rpcErr || !cellarId) {
+      setSaveError('Could not access your cellar. Please try again.')
+      setStatus('idle')
+      return
+    }
 
     const { data: wineRow, error: wineErr } = await supabase
       .from('wines')
@@ -369,7 +366,7 @@ function WineConfirmSheet({
       .single()
 
     if (wineErr || !wineRow) {
-      console.error(wineErr)
+      setSaveError(wineErr?.message ?? 'Failed to save wine.')
       setStatus('idle')
       return
     }
@@ -527,6 +524,12 @@ function WineConfirmSheet({
 
       {/* ── Actions ── */}
       <div className="p-3 space-y-2">
+        {saveError && (
+          <p className="text-xs px-3 py-2 rounded-lg text-center"
+             style={{ background: 'rgba(255,100,100,0.15)', color: '#ffaaaa' }}>
+            {saveError}
+          </p>
+        )}
         {status === 'done' ? (
           <p className="text-center text-white py-2">✓ Saved!</p>
         ) : (
