@@ -15,31 +15,62 @@ interface Props {
   activeCellarId: string
 }
 
-// Gold "Shared" badge
-const SharedBadge = () => (
-  <span className="px-1.5 py-0.5 rounded-full text-xs font-semibold"
-        style={{ background: '#c8a84b', color: '#fff', fontSize: 9, letterSpacing: '0.02em' }}>
-    Shared
-  </span>
-)
-
 export default function CellarSwitcher({ cellars, activeCellarId }: Props) {
-  const [open, setOpen] = useState(false)
   const router = useRouter()
 
-  const active = cellars.find(c => c.id === activeCellarId) ?? cellars[0]
-
-  // Single cellar — static pill (no dropdown)
+  // ── Single cellar — static label, nothing to switch ──────────
   if (cellars.length <= 1) {
+    const c = cellars[0]
     return (
       <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium"
            style={{ background: '#ecddd4', color: '#3a1a20', border: '1.5px solid #d4b8aa' }}>
         <WineGlassIcon />
-        <span>{active?.name ?? 'My Cellar'}</span>
-        {active?.isShared && <SharedBadge />}
+        <span>{c?.name ?? 'My Cellar'}</span>
+        {c?.isShared && <SharedDot />}
       </div>
     )
   }
+
+  // ── Two cellars — segmented toggle ────────────────────────────
+  if (cellars.length === 2) {
+    return (
+      <div className="flex rounded-full p-0.5"
+           style={{ background: '#d4b8aa' }}>
+        {cellars.map(c => {
+          const active = c.id === activeCellarId
+          return (
+            <button
+              key={c.id}
+              onClick={() => { if (!active) router.push(`/cellar?cellar=${c.id}`) }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all"
+              style={{
+                background:  active ? '#8b2035' : 'transparent',
+                color:       active ? 'white'   : '#3a1a20',
+                fontWeight:  active ? 600       : 400,
+              }}
+            >
+              {c.isShared
+                ? <SharedDot active={active} />
+                : <WineGlassIcon active={active} />
+              }
+              <span>{c.name}</span>
+            </button>
+          )
+        })}
+      </div>
+    )
+  }
+
+  // ── Three+ cellars — dropdown ─────────────────────────────────
+  return <CellarDropdown cellars={cellars} activeCellarId={activeCellarId} />
+}
+
+// ── Dropdown (3+ cellars) ─────────────────────────────────────
+
+function CellarDropdown({ cellars, activeCellarId }: Props) {
+  const [open, setOpen] = useState(false)
+  const router = useRouter()
+  const active = cellars.find(c => c.id === activeCellarId) ?? cellars[0]
 
   return (
     <div className="relative">
@@ -50,7 +81,7 @@ export default function CellarSwitcher({ cellars, activeCellarId }: Props) {
       >
         <WineGlassIcon />
         <span>{active?.name ?? 'My Cellar'}</span>
-        {active?.isShared && <SharedBadge />}
+        {active?.isShared && <SharedDot />}
         <span style={{ color: '#a07060', fontSize: 9 }}>▾</span>
       </button>
 
@@ -62,14 +93,11 @@ export default function CellarSwitcher({ cellars, activeCellarId }: Props) {
             {cellars.map(c => (
               <button
                 key={c.id}
-                onClick={() => {
-                  setOpen(false)
-                  router.push(`/cellar?cellar=${c.id}`)
-                }}
+                onClick={() => { setOpen(false); router.push(`/cellar?cellar=${c.id}`) }}
                 className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-sm text-left"
                 style={{
                   background: c.id === activeCellarId ? '#ecddd4' : 'transparent',
-                  color: '#3a1a20',
+                  color:      '#3a1a20',
                   fontWeight: c.id === activeCellarId ? 600 : 400,
                 }}
               >
@@ -78,10 +106,8 @@ export default function CellarSwitcher({ cellars, activeCellarId }: Props) {
                   <span>{c.name}</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  {c.isShared && <SharedBadge />}
-                  {c.id === activeCellarId && (
-                    <span style={{ color: '#8b2035' }}>✓</span>
-                  )}
+                  {c.isShared && <SharedDot />}
+                  {c.id === activeCellarId && <span style={{ color: '#8b2035' }}>✓</span>}
                 </div>
               </button>
             ))}
@@ -92,14 +118,26 @@ export default function CellarSwitcher({ cellars, activeCellarId }: Props) {
   )
 }
 
-function WineGlassIcon() {
+// ── Icons & badges ────────────────────────────────────────────
+
+function WineGlassIcon({ active }: { active?: boolean }) {
   return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+         stroke={active ? 'white' : 'currentColor'}
          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M8 22h8"/>
       <path d="M7 10h10"/>
       <path d="M12 15v7"/>
       <path d="M17 2H7l2 8a3 3 0 0 0 6 0l2-8z"/>
     </svg>
+  )
+}
+
+function SharedDot({ active }: { active?: boolean }) {
+  return (
+    <span className="flex items-center gap-1">
+      <span className="w-1.5 h-1.5 rounded-full shrink-0"
+            style={{ background: active ? 'rgba(255,255,255,0.8)' : '#c8a84b' }} />
+    </span>
   )
 }
