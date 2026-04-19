@@ -214,7 +214,7 @@ export default function AddWinePage() {
                    style={{ borderColor: '#d4b8aa', borderTopColor: '#8b2035' }} />
             </div>
           )}
-          {showDrop && suggestions.length > 0 && (
+          {showDrop && (suggestions.length > 0 || (!searching && query.length >= 2)) && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setShowDrop(false)} />
               <div className="absolute left-0 right-0 top-full mt-1 z-20 rounded-xl overflow-hidden shadow-lg"
@@ -243,6 +243,25 @@ export default function AddWinePage() {
                     )}
                   </button>
                 ))}
+                {/* Always offer the typed text as a manual entry option */}
+                <button
+                  onMouseDown={() => {
+                    setName(query.trim())
+                    setQuery(query.trim())
+                    setShowDrop(false)
+                    setFromCat(false)
+                  }}
+                  className="w-full text-left px-4 py-3 flex items-center gap-2"
+                >
+                  <span className="text-xs px-1.5 py-0.5 rounded font-medium shrink-0"
+                        style={{ background: '#ecddd4', color: '#8b2035' }}>+ Use</span>
+                  <p className="text-sm font-medium truncate" style={{ color: '#3a1a20' }}>
+                    "{query.trim()}"
+                  </p>
+                  {suggestions.length === 0 && (
+                    <p className="text-xs shrink-0" style={{ color: '#a07060' }}>not in catalogue</p>
+                  )}
+                </button>
               </div>
             </>
           )}

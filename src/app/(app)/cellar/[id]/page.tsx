@@ -190,7 +190,12 @@ export default async function WineDetailPage({
           <div className="flex-1 min-w-0">
 
             <h1 className="text-xl font-bold text-white leading-tight">
-              {wine.name}
+              {(() => {
+                const n = wine.name ?? ''
+                const p = wine.producer ?? ''
+                if (!p || n.toLowerCase().includes(p.toLowerCase()) || p.toLowerCase().includes(n.toLowerCase())) return n
+                return `${p} ${n}`
+              })()}
             </h1>
 
             {/* Key details — compact rows */}

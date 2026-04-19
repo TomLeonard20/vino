@@ -8,6 +8,16 @@ import WineBottleImage  from './WineBottleImage'
 
 const NOW = new Date().getFullYear()
 
+/** Returns "Producer Name" if producer isn't already part of the name. */
+function displayName(name?: string | null, producer?: string | null): string {
+  if (!name) return 'Unknown wine'
+  if (!producer) return name
+  const n = name.toLowerCase()
+  const p = producer.toLowerCase()
+  if (n.includes(p) || p.includes(n)) return name
+  return `${producer} ${name}`
+}
+
 function estimatedWindow(wineType: WineType, vintage: number | null) {
   switch (wineType) {
     case 'Champagne':
@@ -69,6 +79,7 @@ export default function CellarBottleCard({
 }) {
   const wine = bottle.wine as {
     name?:            string
+    producer?:        string | null
     critic_score?:    number | null
     grapes?:          string[]
     appellation?:     string
@@ -108,7 +119,7 @@ export default function CellarBottleCard({
         <div className="flex items-center gap-2">
           <ScoreBadge score={wine?.critic_score ?? null} size="sm" />
           <p className="flex-1 font-semibold text-sm truncate min-w-0" style={{ color: '#3a1a20' }}>
-            {wine?.name ?? 'Unknown wine'}
+            {displayName(wine?.name, wine?.producer)}
           </p>
           <span className="font-bold text-sm shrink-0" style={{ color: '#3a1a20' }}>
             ×{bottle.quantity}
