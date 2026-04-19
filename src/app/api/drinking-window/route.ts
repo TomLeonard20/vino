@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
 Name: ${name}
 Producer: ${producer || 'Unknown'}
 Region: ${region || 'Unknown'}
-Vintage: ${vintage ?? 'Unknown'}
+Vintage: ${vintage ?? 'NV (non-vintage)'}
 Grape varieties: ${grapes?.join(', ') || 'Unknown'}
 Wine type: ${wineType || 'Unknown'}
 Current year: ${currentYear}
@@ -45,10 +45,15 @@ Respond with ONLY valid JSON — no markdown, no prose:
 }
 
 Rules:
-- drinkFrom must be >= ${currentYear} if the wine is not yet ready, or the vintage year if already open
+- drinkFrom may be in the past if the wine is already in its drinking window
 - peak must be between drinkFrom and drinkTo
-- Base estimates on the wine's style, region, and vintage
-- If vintage is unknown, assume ${currentYear - 2}`
+- drinkTo must reflect the wine's true ageing potential — do not cut it short
+- Base estimates on the specific wine's style, region, vintage, and producer reputation
+- Champagne guidance (important — do not underestimate):
+  * NV Champagne (no vintage): drink now, peak in 2–3 years, window closes in 5–7 years from ${currentYear}
+  * Vintage Champagne from a top house: drinkTo should be vintage + 20 to 30 years
+  * Prestige cuvée (Dom Pérignon, Cristal, Belle Époque etc): drinkTo can be vintage + 30 to 40 years
+- If vintage is unknown for a non-Champagne wine, use ${currentYear - 3} as a conservative assumption`
 
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {

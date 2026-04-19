@@ -100,12 +100,18 @@ export default async function WineDetailPage({
   const hasWindow = !!(b.drink_from && b.drink_to && b.peak)
 
   function estimateWindow(vintage: number | null, wineType: string) {
-    const base = vintage ?? new Date().getFullYear()
+    const now = new Date().getFullYear()
     switch (wineType) {
-      case 'Champagne': return { drinkFrom: base + 4, peak: base + 10, drinkTo: base + 20 }
-      case 'White':     return { drinkFrom: base + 1, peak: base + 3,  drinkTo: base + 7  }
-      case 'Rosé':      return { drinkFrom: base,     peak: base + 1,  drinkTo: base + 3  }
-      default:          return { drinkFrom: base + 2, peak: base + 7,  drinkTo: base + 14 }
+      case 'Champagne':
+        if (!vintage) return { drinkFrom: now, peak: now + 2, drinkTo: now + 5 }
+        return { drinkFrom: vintage + 5, peak: vintage + 12, drinkTo: vintage + 25 }
+      case 'White':
+        return { drinkFrom: (vintage ?? now) + 1, peak: (vintage ?? now) + 3, drinkTo: (vintage ?? now) + 7 }
+      case 'Rosé':
+        return { drinkFrom: now, peak: now + 1, drinkTo: now + 3 }
+      default: // Red
+        if (!vintage) return { drinkFrom: now, peak: now + 5, drinkTo: now + 10 }
+        return { drinkFrom: vintage + 2, peak: vintage + 7, drinkTo: vintage + 15 }
     }
   }
 

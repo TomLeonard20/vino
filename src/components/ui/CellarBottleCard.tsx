@@ -9,12 +9,22 @@ import WineBottleImage  from './WineBottleImage'
 const NOW = new Date().getFullYear()
 
 function estimatedWindow(wineType: WineType, vintage: number | null) {
-  const base = vintage ?? NOW
   switch (wineType) {
-    case 'Champagne': return { drinkFrom: base + 4, peak: base + 10, drinkTo: base + 20 }
-    case 'White':     return { drinkFrom: base + 1, peak: base + 3,  drinkTo: base + 7  }
-    case 'Rosé':      return { drinkFrom: base,     peak: base + 1,  drinkTo: base + 3  }
-    default:          return { drinkFrom: base + 2, peak: base + 7,  drinkTo: base + 14 }
+    case 'Champagne':
+      if (!vintage) {
+        // NV Champagne — anchored to now, not a vintage year.
+        // Drink immediately; most NV is best within 3–5 years of release.
+        return { drinkFrom: NOW, peak: NOW + 2, drinkTo: NOW + 5 }
+      }
+      // Vintage Champagne — significant ageing potential.
+      return { drinkFrom: vintage + 5, peak: vintage + 12, drinkTo: vintage + 25 }
+    case 'White':
+      return { drinkFrom: (vintage ?? NOW) + 1, peak: (vintage ?? NOW) + 3,  drinkTo: (vintage ?? NOW) + 7  }
+    case 'Rosé':
+      return { drinkFrom: NOW, peak: NOW + 1, drinkTo: NOW + 3 }
+    default: // Red
+      if (!vintage) return { drinkFrom: NOW, peak: NOW + 5, drinkTo: NOW + 10 }
+      return { drinkFrom: vintage + 2, peak: vintage + 7, drinkTo: vintage + 15 }
   }
 }
 
