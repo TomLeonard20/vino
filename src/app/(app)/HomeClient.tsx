@@ -22,15 +22,9 @@ const COPY = {
     bottles:         'Bottles',
     tastingNotes:    'Tasting notes',
     drinkSoon:       'Drink soon',
-    chartTitle:      'Cellar by Vintage',
-    chartUnlock:     (n: number) => `Chart unlocks once you've added 10 bottles${n > 0 ? ` · ${n} of 10 so far` : ''}.`,
     addBottle:       'Add a bottle',
-    pairTitle:       'Pair my meal',
-    pairDesc:        "Tell us what you're eating and we'll rank your cellar + suggest styles.",
     pairPlaceholder: 'e.g. Roast lamb with rosemary',
     pairButton:      'Match',
-    findTitle:       'What are you looking for?',
-    findDesc:        "Describe the style, mood or occasion and we'll recommend the best grapes and regions.",
     findPlaceholder: 'e.g. something bold and oaky for a cold night',
     findButton:      'Find',
     recentNotes:     'Recent notes',
@@ -42,15 +36,9 @@ const COPY = {
     bottles:         'Bottiglie',
     tastingNotes:    'Note di degustazione',
     drinkSoon:       'Da bere presto',
-    chartTitle:      'Cantina per Annata',
-    chartUnlock:     (n: number) => `Il grafico si sblocca dopo 10 bottiglie${n > 0 ? ` · ${n} di 10 finora` : ''}.`,
     addBottle:       'Aggiungi una bottiglia',
-    pairTitle:       'Abbina il mio pasto',
-    pairDesc:        "Dicci cosa stai mangiando e classificheremo la tua cantina + suggeriremo gli stili.",
     pairPlaceholder: 'es. Agnello arrosto al rosmarino',
     pairButton:      'Abbina',
-    findTitle:       'Cosa stai cercando?',
-    findDesc:        "Descrivi lo stile, l'umore o l'occasione e consiglieremo i migliori vitigni e regioni.",
     findPlaceholder: 'es. qualcosa di corposo e legnoso per una fredda serata',
     findButton:      'Cerca',
     recentNotes:     'Note recenti',
@@ -122,6 +110,7 @@ function SetNamePrompt() {
 
 export default function HomeClient({ name, totalBottles, drinkSoon, noteCount, allBottles, recentNotes, vintageQuality }: Props) {
   const [lang, setLang] = useState<Lang>('en')
+  const [aiTab, setAiTab] = useState<'pair' | 'find'>('pair')
   const hour = new Date().getHours()
 
   useEffect(() => {
@@ -212,42 +201,69 @@ export default function HomeClient({ name, totalBottles, drinkSoon, noteCount, a
         </div>
       </div>
 
-      {/* ── Pair my meal ── */}
-      <div className="rounded-xl p-4 space-y-2" style={{ background: '#ecddd4' }}>
-        <div className="flex items-center gap-2">
-          {/* Fork & knife icon */}
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3a1a20" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/>
-          </svg>
-          <h3 className="font-semibold text-sm" style={{ color: '#3a1a20' }}>{t.pairTitle}</h3>
+      {/* ── AI assistant — Pair / Find in a single card ── */}
+      <div className="rounded-xl overflow-hidden" style={{ background: '#ecddd4' }}>
+        {/* Tab bar */}
+        <div className="flex" style={{ borderBottom: '1px solid #d4b8aa' }}>
+          {([
+            {
+              id: 'pair' as const,
+              label: 'Pair a meal',
+              icon: (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/>
+                  <path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/>
+                </svg>
+              ),
+            },
+            {
+              id: 'find' as const,
+              label: 'Find a style',
+              icon: (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                </svg>
+              ),
+            },
+          ] as const).map(tab => {
+            const active = aiTab === tab.id
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setAiTab(tab.id)}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition-colors"
+                style={{
+                  color:      active ? '#8b2035' : '#a07060',
+                  background: active ? '#f5ede6' : 'transparent',
+                  borderBottom: active ? '2px solid #8b2035' : '2px solid transparent',
+                }}
+              >
+                {tab.icon}{tab.label}
+              </button>
+            )
+          })}
         </div>
-        <p className="text-xs" style={{ color: '#a07060' }}>{t.pairDesc}</p>
-        <form action="/pairing" method="get" className="flex gap-2 pt-1">
-          <input name="meal" type="text" placeholder={t.pairPlaceholder}
-            className="flex-1 px-3 py-2 rounded-lg text-sm border"
-            style={{ background: '#f5ede6', borderColor: '#d4b8aa', color: '#3a1a20' }} />
-          <button type="submit" className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
-            style={{ background: '#8b2035' }}>{t.pairButton}</button>
-        </form>
-      </div>
 
-      {/* ── What are you looking for? ── */}
-      <div className="rounded-xl p-4 space-y-2" style={{ background: '#ecddd4' }}>
-        <div className="flex items-center gap-2">
-          {/* Search icon */}
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3a1a20" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-          </svg>
-          <h3 className="font-semibold text-sm" style={{ color: '#3a1a20' }}>{t.findTitle}</h3>
+        {/* Input area */}
+        <div className="p-3">
+          {aiTab === 'pair' ? (
+            <form action="/pairing" method="get" className="flex gap-2">
+              <input name="meal" type="text" placeholder={t.pairPlaceholder}
+                className="flex-1 px-3 py-2 rounded-lg text-sm border"
+                style={{ background: '#f5ede6', borderColor: '#d4b8aa', color: '#3a1a20' }} />
+              <button type="submit" className="px-4 py-2 rounded-lg text-sm font-semibold text-white shrink-0"
+                style={{ background: '#8b2035' }}>{t.pairButton}</button>
+            </form>
+          ) : (
+            <form action="/find" method="get" className="flex gap-2">
+              <input name="q" type="text" placeholder={t.findPlaceholder}
+                className="flex-1 px-3 py-2 rounded-lg text-sm border"
+                style={{ background: '#f5ede6', borderColor: '#d4b8aa', color: '#3a1a20' }} />
+              <button type="submit" className="px-4 py-2 rounded-lg text-sm font-semibold text-white shrink-0"
+                style={{ background: '#8b2035' }}>{t.findButton}</button>
+            </form>
+          )}
         </div>
-        <p className="text-xs" style={{ color: '#a07060' }}>{t.findDesc}</p>
-        <form action="/find" method="get" className="flex gap-2 pt-1">
-          <input name="q" type="text" placeholder={t.findPlaceholder}
-            className="flex-1 px-3 py-2 rounded-lg text-sm border"
-            style={{ background: '#f5ede6', borderColor: '#d4b8aa', color: '#3a1a20' }} />
-          <button type="submit" className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
-            style={{ background: '#8b2035' }}>{t.findButton}</button>
-        </form>
       </div>
 
       {/* ── Recent notes ── */}
