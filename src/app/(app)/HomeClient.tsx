@@ -1,6 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import ScoreBadge from '@/components/ui/ScoreBadge'
 import StarRating from '@/components/ui/StarRating'
@@ -60,12 +62,61 @@ const COPY = {
 type Lang = keyof typeof COPY
 
 interface Props {
-  name:         string
+  name:         string | null
   totalBottles: number
   drinkSoon:    number
   noteCount:    number
   allBottles:   CellarBottle[]
   recentNotes:  TastingNote[]
+}
+
+function SetNamePrompt() {
+  const router = useRouter()
+  const [value, setValue] = useState('')
+  const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState('')
+
+  async function save() {
+    const trimmed = value.trim()
+    if (!trimmed) { setError('Please enter your first name'); return }
+    setError('')
+    const supabase = createClient()
+    const { error: err } = await supabase.auth.updateUser({ data: { full_name: trimmed } })
+    if (err) { setError(err.message); return }
+    startTransition(() => { router.refresh() })
+  }
+
+  return (
+    <div className="rounded-xl p-4 space-y-3" style={{ background: '#ecddd4', border: '1.5px solid #d4b8aa' }}>
+      <div className="flex items-center gap-2">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3a1a20" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+        </svg>
+        <h3 className="font-semibold text-sm" style={{ color: '#3a1a20' }}>What&apos;s your first name?</h3>
+      </div>
+      <p className="text-xs" style={{ color: '#a07060' }}>We&apos;ll use it to personalise your greeting.</p>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && save()}
+          placeholder="e.g. Tom"
+          className="flex-1 px-3 py-2 rounded-lg text-sm border"
+          style={{ background: '#f5ede6', borderColor: error ? '#8b2035' : '#d4b8aa', color: '#3a1a20' }}
+        />
+        <button
+          onClick={save}
+          disabled={isPending}
+          className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
+          style={{ background: '#8b2035', opacity: isPending ? 0.6 : 1 }}
+        >
+          Save
+        </button>
+      </div>
+      {error && <p className="text-xs" style={{ color: '#8b2035' }}>{error}</p>}
+    </div>
+  )
 }
 
 export default function HomeClient({ name, totalBottles, drinkSoon, noteCount, allBottles, recentNotes }: Props) {
@@ -86,8 +137,11 @@ export default function HomeClient({ name, totalBottles, drinkSoon, noteCount, a
 
       {/* ── Greeting ── */}
       <h2 className="text-xl font-semibold" style={{ color: '#3a1a20' }}>
-        {t.greeting(hour)}, {name}
+        {name ? `${t.greeting(hour)}, ${name}` : t.greeting(hour)}
       </h2>
+
+      {/* ── Name prompt (shown only when name not yet set) ── */}
+      {!name && <SetNamePrompt />}
 
       {/* ── Stats row — individual cards ── */}
       <div className="grid grid-cols-3 gap-2">

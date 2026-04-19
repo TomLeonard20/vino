@@ -3,13 +3,11 @@ import { drinkingStatus } from '@/types/database'
 import type { CellarBottle, TastingNote } from '@/types/database'
 import HomeClient from './HomeClient'
 
-/** Pull first name from display_name metadata or email prefix */
-function firstName(user: { email?: string; user_metadata?: Record<string, string> } | null): string {
-  if (!user) return 'there'
+/** Pull first name from display_name metadata, or null if not set */
+function firstName(user: { user_metadata?: Record<string, string> } | null): string | null {
+  if (!user) return null
   const full = user.user_metadata?.full_name ?? user.user_metadata?.name ?? ''
-  if (full) return full.split(' ')[0]
-  const prefix = user.email?.split('@')[0] ?? ''
-  return prefix.replace(/\d+/g, '').replace(/^./, c => c.toUpperCase()) || 'there'
+  return full ? full.split(' ')[0] : null
 }
 
 export default async function HomePage() {
@@ -32,7 +30,7 @@ export default async function HomePage() {
 
   return (
     <HomeClient
-      name={firstName(user as Parameters<typeof firstName>[0])}
+      name={firstName(user as Parameters<typeof firstName>[0] | null)}
       totalBottles={totalBottles}
       drinkSoon={drinkSoon}
       noteCount={recentNotes.length}
