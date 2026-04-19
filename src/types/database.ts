@@ -15,9 +15,11 @@ export interface Wine {
   producer: string
   region: string
   appellation: string
+  country?: string | null          // optional — present if column exists in DB
   vintage: number | null
   grapes: string[]
   critic_score: number | null
+  label_image_url?: string | null  // optional — wine label photo for bottle card thumbnail
   db_source: string | null
   created_at: string
   flavour_profile?: FlavourProfile

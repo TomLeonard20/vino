@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { WINE_TYPE_COLOURS } from '@/types/database'
 import type { CellarBottle, TastingNote, FlavourProfile } from '@/types/database'
 import DrinkingWindowChart from '@/components/ui/DrinkingWindowChart'
+import WineBottleImage     from '@/components/ui/WineBottleImage'
 import Link from 'next/link'
 
 function flavourLabel(key: string, val: number): string {
@@ -102,6 +103,20 @@ export default async function WineDetailPage({
 
       {/* ── Hero card — full bleed ── */}
       <div className="px-4 pb-5 pt-4" style={{ background: '#8b2035' }}>
+
+        {/* Wine bottle illustration centred at top of hero */}
+        <div className="flex justify-center mb-4">
+          <div style={{ width: 64, height: 100 }}>
+            <WineBottleImage
+              type={b.wine_type}
+              labelImageUrl={(wine as any).label_image_url}
+              transparent
+              width={56}
+              height={96}
+            />
+          </div>
+        </div>
+
         <div className="flex items-start justify-between gap-3 mb-5">
           <h1 className="text-2xl font-bold text-white leading-tight flex-1">
             {wine.name}

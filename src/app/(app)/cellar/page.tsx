@@ -1,9 +1,22 @@
 import { createClient } from '@/lib/supabase/server'
-import { drinkingStatus, WINE_TYPE_COLOURS } from '@/types/database'
+import { WINE_TYPE_COLOURS, drinkingStatus } from '@/types/database'
 import type { CellarBottle, WineType } from '@/types/database'
-import CellarBottleCard from '@/components/ui/CellarBottleCard'
-import CellarSwitcher from './CellarSwitcher'
+import SwipeToDeleteCard from '@/components/ui/SwipeToDeleteCard'
+import CellarSwitcher   from './CellarSwitcher'
+import FilterSortBar    from './FilterSortBar'
+import AddBottleButtons from './AddBottleButtons'
 import Link from 'next/link'
+import {
+  parseFiltersFromSearchParams,
+  parseSortFromSearchParams,
+  activeFilterCount,
+  applyFilters,
+  applySort,
+  computeOptions,
+  buildFilterUrl,
+  type ActiveFilters,
+  type SortOption,
+} from './filterUtils'
 
 const WINE_TYPES: WineType[] = ['Red', 'White', 'Rosé', 'Champagne']
 
@@ -12,40 +25,47 @@ function groupLabel(type: WineType | string): string {
   return `${type} wines`
 }
 
-const ScanIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
-    <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
-    <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
-    <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
-    <line x1="7" y1="12" x2="7" y2="12"/>
-    <line x1="12" y1="12" x2="17" y2="12"/>
-  </svg>
-)
+// ── Active filter chip URL helpers ────────────────────────────
 
-const PenIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-  </svg>
-)
+function removeArrayValue(
+  filters: ActiveFilters, key: keyof ActiveFilters, value: string,
+): ActiveFilters {
+  return { ...filters, [key]: (filters[key] as string[]).filter(v => v !== value) }
+}
+
+function removeScore(filters: ActiveFilters): ActiveFilters {
+  return { ...filters, scoreMin: null, scoreMax: null }
+}
+
+function scoreChipLabel(min: number | null, max: number | null): string {
+  if (min !== null && max !== null) return `${min}–${max} pts`
+  if (min !== null) return `${min}+ pts`
+  if (max !== null) return `Up to ${max} pts`
+  return ''
+}
+
+// ── Page ──────────────────────────────────────────────────────
 
 export default async function CellarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ type?: string; cellar?: string; sort?: string; ready?: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const { type: filterType, cellar: cellarParam, sort, ready } = await searchParams
-  const filterReady = ready === '1'
+  const params = await searchParams
+
+  const str = (k: string) => typeof params[k] === 'string' ? params[k] as string : undefined
+
+  const filterType    = str('type')
+  const cellarParam   = str('cellar') ?? null
+  const activeFilters = parseFiltersFromSearchParams(params)
+  const activeSort    = parseSortFromSearchParams(params)
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Currency preference from user metadata (default A$)
   const currency = (user?.user_metadata?.currency as string | undefined) ?? 'A$'
 
-  // ── Fetch all cellars the user belongs to ─────────────────────
+  // ── Fetch cellars ─────────────────────────────────────────────
   const { data: memberships } = await supabase
     .from('cellar_members')
     .select('cellar_id, role, cellar:cellars(id, name)')
@@ -79,70 +99,114 @@ export default async function CellarPage({
     ? cellarParam
     : (cellarIds[0] ?? null)
 
-  // ── Fetch bottles for active cellar ──────────────────────────
+  // ── Fetch bottles ─────────────────────────────────────────────
   const query = supabase
     .from('cellar_bottles')
     .select('*, wine:wines(*, flavour_profile:flavour_profiles(*))')
     .order('added_at', { ascending: false })
 
-  if (activeCellarId) {
-    query.eq('cellar_id', activeCellarId)
-  }
+  if (activeCellarId) query.eq('cellar_id', activeCellarId)
 
   const { data } = await query
   const allBottles = (data ?? []) as CellarBottle[]
 
-  const DRINK_SOON_STATUSES = ['Drink now', 'At peak', 'Open soon']
+  // ── Compute available filter options ──────────────────────────
+  const options = computeOptions(allBottles)
 
-  const filtered = filterReady
-    ? allBottles.filter(b => DRINK_SOON_STATUSES.includes(drinkingStatus(b)))
-    : filterType && filterType !== 'All'
-      ? allBottles.filter(b => b.wine_type === filterType)
-      : allBottles
-
-  // Sort: default desc (highest score first); ?sort=asc flips it
-  const sortAsc = sort === 'asc'
-
-  const grouped = WINE_TYPES.map(type => ({
-    type,
-    bottles: filtered
-      .filter(b => b.wine_type === type)
-      .sort((a, b) => {
-        const diff = (a.wine?.critic_score ?? 0) - (b.wine?.critic_score ?? 0)
-        return sortAsc ? diff : -diff
-      }),
-  })).filter(g => g.bottles.length > 0)
-
+  // ── Stats (always from full cellar) ──────────────────────────
   const totalBottles = allBottles.reduce((s, b) => s + b.quantity, 0)
-  const drinkSoon    = allBottles.filter(b => {
-    const s = drinkingStatus(b)
-    return s === 'Drink now' || s === 'At peak' || s === 'Open soon'
-  }).length
+
+  const DRINK_SOON_STATUSES = ['Drink now', 'At peak', 'Open soon']
+  const drinkSoon = allBottles.filter(b =>
+    DRINK_SOON_STATUSES.includes(drinkingStatus(b))
+  ).length
+
   const estValue = allBottles.reduce((s, b) =>
     s + ((b.purchase_price ?? b.market_price ?? 0) * b.quantity), 0)
 
+  // ── Apply wine-type tab filter ────────────────────────────────
+  const typeFilter = (filterType && WINE_TYPES.includes(filterType as WineType))
+    ? filterType as WineType
+    : null
+
+  const bottlesByType = typeFilter
+    ? allBottles.filter(b => b.wine_type === typeFilter)
+    : allBottles
+
+  // ── Apply advanced filters ────────────────────────────────────
+  const afterFilters = applyFilters(bottlesByType, activeFilters)
+
+  // ── Group & sort ──────────────────────────────────────────────
+  const grouped = WINE_TYPES.map(type => ({
+    type,
+    bottles: applySort(
+      afterFilters.filter(b => b.wine_type === type),
+      activeSort,
+    ),
+  })).filter(g => g.bottles.length > 0)
+
   const activeFilter = filterType ?? 'All'
+  const filterBadge  = activeFilterCount(activeFilters)
 
-  // Build a sort-toggle href, preserving other params
-  function sortHref(dir: 'asc' | 'desc') {
-    const p = new URLSearchParams()
-    if (filterType && filterType !== 'All') p.set('type', filterType)
-    if (activeCellarId) p.set('cellar', activeCellarId)
-    if (filterReady) p.set('ready', '1')
-    p.set('sort', dir)
-    return `/cellar?${p.toString()}`
-  }
-
-  // Href for the drink-soon banner
+  // ── Drink-soon banner link (use window param) ─────────────────
   const drinkSoonHref = (() => {
     const p = new URLSearchParams()
     if (activeCellarId) p.set('cellar', activeCellarId)
-    p.set('ready', '1')
+    p.set('window', 'Drink now,At peak,Open soon')
     return `/cellar?${p.toString()}`
   })()
 
+  // ── Helper: build URL preserving all current filters ─────────
+  function hrefWithType(type: string) {
+    const p = new URLSearchParams()
+    if (type !== 'All') p.set('type', type)
+    if (activeCellarId) p.set('cellar', activeCellarId)
+    if (activeSort !== 'score_desc') p.set('sort', activeSort)
+    if (activeFilters.window.length)   p.set('window',   activeFilters.window.join(','))
+    if (activeFilters.grapes.length)   p.set('grapes',   activeFilters.grapes.join(','))
+    if (activeFilters.vintage.length)  p.set('vintage',  activeFilters.vintage.join(','))
+    if (activeFilters.producer.length) p.set('producer', activeFilters.producer.join(','))
+    if (activeFilters.country.length)  p.set('country',  activeFilters.country.join(','))
+    if (activeFilters.region.length)   p.set('region',   activeFilters.region.join(','))
+    if (activeFilters.scoreMin !== null) p.set('score_min', String(activeFilters.scoreMin))
+    if (activeFilters.scoreMax !== null) p.set('score_max', String(activeFilters.scoreMax))
+    const qs = p.toString()
+    return `/cellar${qs ? `?${qs}` : ''}`
+  }
+
+  // ── Chip removal URLs ─────────────────────────────────────────
+  type ChipItem = { label: string; href: string }
+
+  const chips: ChipItem[] = []
+  const base = { cellar: activeCellarId, type: filterType, sort: activeSort }
+
+  for (const v of activeFilters.window) {
+    chips.push({ label: v, href: buildFilterUrl(base, removeArrayValue(activeFilters, 'window', v)) })
+  }
+  for (const v of activeFilters.grapes) {
+    chips.push({ label: v, href: buildFilterUrl(base, removeArrayValue(activeFilters, 'grapes', v)) })
+  }
+  for (const v of activeFilters.vintage) {
+    chips.push({ label: v, href: buildFilterUrl(base, removeArrayValue(activeFilters, 'vintage', v)) })
+  }
+  for (const v of activeFilters.producer) {
+    chips.push({ label: v, href: buildFilterUrl(base, removeArrayValue(activeFilters, 'producer', v)) })
+  }
+  for (const v of activeFilters.country) {
+    chips.push({ label: v, href: buildFilterUrl(base, removeArrayValue(activeFilters, 'country', v)) })
+  }
+  for (const v of activeFilters.region) {
+    chips.push({ label: v, href: buildFilterUrl(base, removeArrayValue(activeFilters, 'region', v)) })
+  }
+  if (activeFilters.scoreMin !== null || activeFilters.scoreMax !== null) {
+    chips.push({
+      label: scoreChipLabel(activeFilters.scoreMin, activeFilters.scoreMax),
+      href:  buildFilterUrl(base, removeScore(activeFilters)),
+    })
+  }
+
   return (
-    <div className="space-y-5 pb-28">
+    <div className="space-y-4 pb-28">
 
       {/* ── Cellar switcher header ── */}
       <div className="flex items-center justify-between">
@@ -160,8 +224,10 @@ export default async function CellarPage({
           { label: 'Est. value', value: estValue > 0 ? `${currency}${Math.round(estValue)}` : '—' },
         ].map(s => (
           <div key={s.label} className="text-center py-4 px-2 rounded-xl" style={{ background: '#ecddd4' }}>
-            <div className="text-xl font-bold"
-                 style={{ color: 'highlight' in s && s.highlight ? '#8b2035' : '#3a1a20' }}>
+            <div
+              className="text-xl font-bold"
+              style={{ color: 'highlight' in s && s.highlight ? '#8b2035' : '#3a1a20' }}
+            >
               {s.value}
             </div>
             <div className="text-xs mt-0.5" style={{ color: '#a07060' }}>{s.label}</div>
@@ -171,9 +237,11 @@ export default async function CellarPage({
 
       {/* ── Drink-soon banner ── */}
       {drinkSoon > 0 && (
-        <Link href={drinkSoonHref}
-              className="rounded-xl px-4 py-3 flex items-center gap-3 active:opacity-80 transition-opacity"
-              style={{ background: '#8b2035' }}>
+        <Link
+          href={drinkSoonHref}
+          className="rounded-xl px-4 py-3 flex items-center gap-3 active:opacity-80 transition-opacity"
+          style={{ background: '#8b2035' }}
+        >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white"
                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
             <circle cx="12" cy="12" r="10"/>
@@ -184,42 +252,29 @@ export default async function CellarPage({
             <p className="text-sm font-semibold text-white">
               {drinkSoon} {drinkSoon === 1 ? 'bottle is' : 'bottles are'} ready to drink
             </p>
-            <p className="text-xs mt-0.5" style={{ color: '#f5c6cc' }}>
-              Tap to see them →
-            </p>
+            <p className="text-xs mt-0.5" style={{ color: '#f5c6cc' }}>Tap to see them →</p>
           </div>
         </Link>
       )}
 
       {/* ── Type filter tabs ── */}
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {/* Ready-to-drink active chip — shown when banner was tapped */}
-        {filterReady && (
-          <a href={`/cellar${activeCellarId ? `?cellar=${activeCellarId}` : ''}`}
-             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap border"
-             style={{ background: '#8b2035', color: 'white', borderColor: '#8b2035' }}>
-            🍷 Ready to drink
-            <span className="opacity-70 text-xs">✕</span>
-          </a>
-        )}
-        {!filterReady && (['All', ...WINE_TYPES] as const).map(type => {
-          const count  = type === 'All'
+        {(['All', ...WINE_TYPES] as const).map(type => {
+          const count = type === 'All'
             ? allBottles.reduce((s, b) => s + b.quantity, 0)
             : allBottles.filter(b => b.wine_type === type).reduce((s, b) => s + b.quantity, 0)
           const active = activeFilter === type
-          const p = new URLSearchParams()
-          if (type !== 'All') p.set('type', type)
-          if (activeCellarId) p.set('cellar', activeCellarId)
-          if (sort) p.set('sort', sort)
-          const href = `/cellar${p.toString() ? `?${p.toString()}` : ''}`
           return (
-            <a key={type} href={href}
-               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap border transition-colors"
-               style={{
-                 background:  active ? '#8b2035' : '#ecddd4',
-                 color:       active ? 'white'   : '#a07060',
-                 borderColor: active ? '#8b2035' : '#d4b8aa',
-               }}>
+            <a
+              key={type}
+              href={hrefWithType(type)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap border transition-colors"
+              style={{
+                background:  active ? '#8b2035' : '#ecddd4',
+                color:       active ? 'white'   : '#a07060',
+                borderColor: active ? '#8b2035' : '#d4b8aa',
+              }}
+            >
               {type !== 'All' && (
                 <span className="w-2 h-2 rounded-full"
                       style={{ background: WINE_TYPE_COLOURS[type as WineType] }} />
@@ -231,65 +286,76 @@ export default async function CellarPage({
         })}
       </div>
 
+      {/* ── Filter & Sort buttons row ── */}
+      <FilterSortBar
+        allBottles={allBottles}
+        options={options}
+        activeFilters={activeFilters}
+        activeSort={activeSort}
+        cellarParam={activeCellarId}
+        typeParam={filterType ?? null}
+        typeFilter={typeFilter}
+      />
+
+      {/* ── Active filter chips ── */}
+      {chips.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {chips.map(chip => (
+            <a
+              key={chip.href + chip.label}
+              href={chip.href}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border"
+              style={{ background: '#ecddd4', color: '#3a1a20', borderColor: '#d4b8aa' }}
+            >
+              {chip.label}
+              <span style={{ color: '#8b2035', fontSize: 11 }}>✕</span>
+            </a>
+          ))}
+          {chips.length > 1 && (
+            <a
+              href={buildFilterUrl(base, { window: [], grapes: [], vintage: [], producer: [], country: [], region: [], scoreMin: null, scoreMax: null })}
+              className="flex items-center px-3 py-1.5 rounded-full text-xs font-medium"
+              style={{ color: '#8b2035' }}
+            >
+              Clear all
+            </a>
+          )}
+        </div>
+      )}
+
       {/* ── Bottle groups / empty state ── */}
       {grouped.length === 0 ? (
         <div className="text-center py-12 space-y-4">
           <p className="text-sm" style={{ color: '#c4a090' }}>
-            {filterReady
-              ? 'No bottles are ready to drink right now.'
-              : filterType && filterType !== 'All'
-                ? `No ${groupLabel(filterType)} in your cellar yet.`
-                : 'Your cellar is empty. Add your first wine!'}
+            {filterBadge > 0 || typeFilter
+              ? 'No bottles match your current filters.'
+              : 'Your cellar is empty. Add your first wine!'}
           </p>
-          <div className="flex gap-2 justify-center">
-            <Link href="/scan"
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border"
-                  style={{ borderColor: '#8b2035', color: '#8b2035', background: 'transparent' }}>
-              <ScanIcon /> Scan label
-            </Link>
-            <Link href="/add"
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border"
-                  style={{ borderColor: '#8b2035', color: '#8b2035', background: 'transparent' }}>
-              <PenIcon /> Add manually
-            </Link>
-          </div>
+          {filterBadge > 0 && (
+            <a
+              href={buildFilterUrl(base, { window: [], grapes: [], vintage: [], producer: [], country: [], region: [], scoreMin: null, scoreMax: null })}
+              className="inline-block text-sm font-medium"
+              style={{ color: '#8b2035' }}
+            >
+              Clear all filters
+            </a>
+          )}
+          {!filterBadge && <AddBottleButtons />}
         </div>
       ) : (
         <>
-          {grouped.map(group => {
-            const nextDir = sortAsc ? 'desc' : 'asc'
-            return (
-              <div key={group.type} className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-sm" style={{ color: '#3a1a20' }}>
-                    {groupLabel(group.type)}
-                  </h3>
-                  <a href={sortHref(nextDir)}
-                     className="flex items-center gap-0.5 text-xs font-medium"
-                     style={{ color: '#8b2035' }}>
-                    {sortAsc ? '↑' : '↓'} Score
-                  </a>
-                </div>
-                {group.bottles.map(bottle => (
-                  <CellarBottleCard key={bottle.id} bottle={bottle} currentUserId={user?.id} />
-                ))}
-              </div>
-            )
-          })}
+          {grouped.map(group => (
+            <div key={group.type} className="space-y-2">
+              <h3 className="font-semibold text-sm" style={{ color: '#3a1a20' }}>
+                {groupLabel(group.type)}
+              </h3>
+              {group.bottles.map(bottle => (
+                <SwipeToDeleteCard key={bottle.id} bottle={bottle} currentUserId={user?.id} />
+              ))}
+            </div>
+          ))}
 
-          {/* Add bottle buttons */}
-          <div className="flex gap-2 pt-1">
-            <Link href="/scan"
-                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold border"
-                  style={{ borderColor: '#8b2035', color: '#8b2035', background: 'transparent' }}>
-              <ScanIcon /> Scan label
-            </Link>
-            <Link href="/add"
-                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold border"
-                  style={{ borderColor: '#8b2035', color: '#8b2035', background: 'transparent' }}>
-              <PenIcon /> Add manually
-            </Link>
-          </div>
+          <AddBottleButtons />
         </>
       )}
     </div>

@@ -32,9 +32,68 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
+/* ── Tap press feedback (iOS) ────────────────────────────── */
+/* Restore native iOS tap highlight so buttons feel responsive */
+a, button {
+  -webkit-tap-highlight-color: rgba(58, 26, 32, 0.08);
+  touch-action: manipulation;  /* prevents 300ms tap delay */
+}
+
 /* Focus ring */
 *:focus-visible {
   outline: 2px solid var(--burgundy);
   outline-offset: 2px;
   border-radius: 4px;
+}
+
+/* ── Sheet slide-up animation ────────────────────────────── */
+@keyframes sheet-slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+.sheet-slide-up {
+  animation: sheet-slide-up 0.28s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+@keyframes backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.backdrop-in {
+  animation: backdrop-in 0.2s ease both;
+}
+
+/* ── Dual range slider (score filter) ─────────────────────── */
+input[type='range'].cellar-range-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  pointer-events: none;
+  height: 24px;
+}
+
+input[type='range'].cellar-range-thumb::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #8b2035;
+  border: 2.5px solid #f5ede6;
+  box-shadow: 0 1px 4px rgba(58, 26, 32, 0.25);
+  cursor: pointer;
+  pointer-events: all;
+}
+
+input[type='range'].cellar-range-thumb::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #8b2035;
+  border: 2.5px solid #f5ede6;
+  box-shadow: 0 1px 4px rgba(58, 26, 32, 0.25);
+  cursor: pointer;
+  pointer-events: all;
 }

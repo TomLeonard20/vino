@@ -2,8 +2,9 @@
 
 import Link from 'next/link'
 import type { CellarBottle, WineType } from '@/types/database'
-import ScoreBadge from './ScoreBadge'
-import WineTypeBar from './WineTypeBar'
+import ScoreBadge       from './ScoreBadge'
+import WineTypeBar      from './WineTypeBar'
+import WineBottleImage  from './WineBottleImage'
 
 const NOW = new Date().getFullYear()
 
@@ -51,19 +52,21 @@ export default function CellarBottleCard({
   bottle,
   currentUserId,
 }: {
-  bottle: CellarBottle
+  bottle:        CellarBottle
   currentUserId?: string
 }) {
   const wine = bottle.wine as {
-    name?: string
-    critic_score?: number | null
-    grapes?: string[]
-    appellation?: string
-    region?: string
-    vintage?: number | null
+    name?:            string
+    critic_score?:    number | null
+    grapes?:          string[]
+    appellation?:     string
+    region?:          string
+    vintage?:         number | null
+    label_image_url?: string | null
   } | undefined
+
   const { label, color } = smartPeakLabel(bottle)
-  const isPartnerBottle = !!(bottle.added_by && currentUserId && bottle.added_by !== currentUserId)
+  const isPartnerBottle  = !!(bottle.added_by && currentUserId && bottle.added_by !== currentUserId)
 
   return (
     <Link
@@ -71,6 +74,14 @@ export default function CellarBottleCard({
       className="rounded-xl overflow-hidden flex items-stretch active:opacity-70 transition-opacity"
       style={{ background: '#ecddd4' }}
     >
+      {/* Wine bottle illustration (or label photo if available) */}
+      <div className="shrink-0 self-stretch" style={{ width: 52 }}>
+        <WineBottleImage
+          type={bottle.wine_type}
+          labelImageUrl={wine?.label_image_url}
+        />
+      </div>
+
       <WineTypeBar type={bottle.wine_type} />
 
       <div className="flex-1 px-3 py-2.5 min-w-0">
@@ -88,10 +99,12 @@ export default function CellarBottleCard({
         {/* Row 2: vintage + grape mini-cells + peak status + partner badge */}
         <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
           <MiniCell label="Vintage" value={wine?.vintage ? String(wine.vintage) : '—'} />
-          {wine?.grapes?.[0] && <MiniCell label="Grape"   value={wine.grapes[0]} />}
-          {isPartnerBottle   && (
-            <span className="text-xs px-1.5 py-0.5 rounded font-medium"
-                  style={{ background: 'rgba(139,32,53,0.12)', color: '#8b2035', fontSize: 9 }}>
+          {wine?.grapes?.[0] && <MiniCell label="Grape" value={wine.grapes[0]} />}
+          {isPartnerBottle && (
+            <span
+              className="text-xs px-1.5 py-0.5 rounded font-medium"
+              style={{ background: 'rgba(139,32,53,0.12)', color: '#8b2035', fontSize: 9 }}
+            >
               Partner
             </span>
           )}
