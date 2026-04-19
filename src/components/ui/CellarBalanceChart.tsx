@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import type { CellarBottle, WineType } from '@/types/database'
 import { WINE_TYPE_COLOURS } from '@/types/database'
 
@@ -7,25 +8,27 @@ const NOW        = new Date().getFullYear()
 const AXIS_START = 2012
 const TYPE_ORDER: WineType[] = ['Red', 'Champagne', 'White', 'Rosé']
 
-// Critic score range used for normalising the quality line.
-// Wine scores almost never go below 82 in published reviews.
+// SVG canvas dimensions (in px-equivalent units — 1:1 with rendered pixels
+// since we use width/height attributes, not a scaled viewBox)
+const SVG_W    = 300   // normalised width; we use viewBox="0 0 300 H"
+const BAR_H    = 90    // chart area height
+const X_AXIS_H = 16    // space below bars for year labels
+const Y_AXIS_W = 22    // space left of bars for bottle-count labels
+const SVG_H    = BAR_H + X_AXIS_H
+
+// Critic score range for normalising the quality line
 const SCORE_MIN = 82
 const SCORE_MAX = 97
 
 function qualityColor(score: number): string {
-  // Map score to a gold→green gradient: weak years dimmer, great years bright gold
-  if (score >= 95) return '#e8c96e'   // gold — exceptional
-  if (score >= 92) return '#c9a84c'   // amber — excellent
-  if (score >= 89) return '#a07840'   // warm brown — good
-  return '#7a5830'                    // muted — average / below average
+  if (score >= 95) return '#e8c96e'
+  if (score >= 92) return '#c9a84c'
+  if (score >= 89) return '#a07840'
+  return '#7a5830'
 }
 
-function qualityLabel(score: number): string {
-  if (score >= 95) return 'Exceptional'
-  if (score >= 92) return 'Excellent'
-  if (score >= 89) return 'Good'
-  if (score >= 86) return 'Average'
-  return 'Below avg'
+function qualityNorm(score: number): number {
+  return Math.max(0, Math.min(1, (score - SCORE_MIN) / (SCORE_MAX - SCORE_MIN)))
 }
 
 export default function CellarBalanceChart({
@@ -39,8 +42,10 @@ export default function CellarBalanceChart({
   isDraft?:        boolean
   bottleCount?:    number
 }) {
+  const [expanded, setExpanded] = useState(false)
+
   const years      = Array.from({ length: NOW - AXIS_START + 1 }, (_, i) => AXIS_START + i)
-  const totalYears = NOW - AXIS_START
+  const totalYears = NOW - AXIS_START  // span between first and last year
 
   const yearData = years.map(year => {
     const counts: Partial<Record<WineType, number>> = {}
@@ -55,25 +60,34 @@ export default function CellarBalanceChart({
     return { year, counts, total }
   })
 
-  const maxTotal    = Math.max(...yearData.map(d => d.total), 1)
-  const noVintage   = bottles.filter(b => !(b.wine as { vintage?: number | null } | undefined)?.vintage)
+  const maxTotal     = Math.max(...yearData.map(d => d.total), 1)
+  const noVintage    = bottles.filter(b => !(b.wine as { vintage?: number | null } | undefined)?.vintage)
     .reduce((s, b) => s + b.quantity, 0)
   const typesPresent = TYPE_ORDER.filter(t => bottles.some(b => b.wine_type === t))
+  const totalQty     = bottles.reduce((s, b) => s + b.quantity, 0)
 
-  const pct = (year: number) => `${((year - AXIS_START) / totalYears) * 100}%`
+  // Map a year → SVG x coordinate (within the chart area, i.e. after Y_AXIS_W)
+  // Chart area runs from x=0 to x=(SVG_W - Y_AXIS_W)
+  const chartW = SVG_W - Y_AXIS_W
+  const xFor   = (year: number) => Y_AXIS_W + ((year - AXIS_START) / totalYears) * chartW
 
-  // Normalise quality score to a 0–1 value for the SVG line
-  const qualityNorm = (score: number) =>
-    Math.max(0, Math.min(1, (score - SCORE_MIN) / (SCORE_MAX - SCORE_MIN)))
+  // Bar slot width (leave 2px gap between bars)
+  const slotW  = chartW / years.length
+  const barW   = Math.max(slotW - 2, 2)
 
-  // Bar chart height
-  const BAR_H = 80
+  // Y-axis ticks: 0, half, max
+  const yTicks = [0, Math.round(maxTotal / 2), maxTotal].filter((v, i, a) => a.indexOf(v) === i)
+
+  const yFor = (bottles: number) => BAR_H - (bottles / maxTotal) * BAR_H
 
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: '#1c0a10' }}>
 
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-3">
+      {/* ── Header — always visible, tappable to expand ── */}
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="w-full flex items-center justify-between px-4 pt-4 pb-3"
+      >
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold tracking-widest uppercase"
                 style={{ color: '#7a4a54', letterSpacing: '0.12em' }}>
@@ -86,186 +100,172 @@ export default function CellarBalanceChart({
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2.5">
-          {typesPresent.map(type => (
-            <div key={type} className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-sm inline-block"
-                    style={{ background: WINE_TYPE_COLOURS[type] }} />
-              <span style={{ color: '#5a3040', fontSize: 10 }}>{type}</span>
+        <div className="flex items-center gap-3">
+          {!expanded && (
+            <div className="flex items-center gap-2">
+              {typesPresent.map(type => (
+                <div key={type} className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-sm inline-block"
+                        style={{ background: WINE_TYPE_COLOURS[type] }} />
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Stacked bar chart + quality line overlay */}
-      <div className="relative mx-4" style={{ height: BAR_H }}>
-
-        {/* Bars */}
-        <div className="absolute inset-0 flex items-end" style={{ gap: 3 }}>
-          {yearData.map(({ year, counts, total }) => {
-            const barPx = total > 0 ? Math.max((total / maxTotal) * (BAR_H - 4), 4) : 2
-            return (
-              <div key={year}
-                   className="flex-1 flex flex-col-reverse rounded-t-sm overflow-hidden"
-                   style={{
-                     height: barPx,
-                     minWidth: 6,
-                     opacity: isDraft && total === 0 ? 0.4 : 1,
-                   }}>
-                {total === 0 ? (
-                  <div style={{ flex: 1, background: '#2a1018', opacity: isDraft ? 0.6 : 0.25 }} />
-                ) : (
-                  TYPE_ORDER.map(type => {
-                    const count = counts[type] ?? 0
-                    if (!count) return null
-                    return (
-                      <div key={type}
-                           style={{
-                             height: `${(count / total) * 100}%`,
-                             background: WINE_TYPE_COLOURS[type],
-                             opacity: isDraft ? 0.65 : 1,
-                           }} />
-                    )
-                  })
-                )}
-              </div>
-            )
-          })}
-        </div>
-
-        {/* Vintage quality SVG overlay */}
-        {Object.keys(vintageQuality).length > 0 && (
-          <svg
-            className="absolute inset-0 pointer-events-none"
-            width="100%"
-            height={BAR_H}
-            preserveAspectRatio="none"
-            viewBox={`0 0 ${years.length} ${BAR_H}`}
-          >
-            {/* Connecting line */}
-            <polyline
-              fill="none"
-              stroke="rgba(232,201,110,0.3)"
-              strokeWidth="0.8"
-              points={years
-                .filter(y => vintageQuality[y] != null)
-                .map((y, _, arr) => {
-                  const x = ((y - AXIS_START) / totalYears) * years.length
-                  const norm = qualityNorm(vintageQuality[y])
-                  const yPos = BAR_H - 6 - norm * (BAR_H - 12)
-                  return `${x},${yPos}`
-                })
-                .join(' ')}
-            />
-            {/* Dots per year */}
-            {years.map(y => {
-              const score = vintageQuality[y]
-              if (score == null) return null
-              const x    = ((y - AXIS_START) / totalYears) * years.length
-              const norm = qualityNorm(score)
-              const yPos = BAR_H - 6 - norm * (BAR_H - 12)
-              return (
-                <circle
-                  key={y}
-                  cx={x}
-                  cy={yPos}
-                  r="1.4"
-                  fill={qualityColor(score)}
-                  opacity="0.9"
-                />
-              )
-            })}
+          )}
+          {/* Chevron */}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+               stroke="rgba(255,255,255,0.3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            {expanded
+              ? <polyline points="18 15 12 9 6 15" />
+              : <polyline points="6 9 12 15 18 9" />}
           </svg>
-        )}
-      </div>
-
-      {/* Year axis */}
-      <div className="relative mx-4 mt-2" style={{ height: 18 }}>
-        <div className="absolute top-0 left-0 right-0 h-px"
-             style={{ background: 'rgba(255,255,255,0.06)' }} />
-        {years.filter(y => y % 2 === 0).map(y => (
-          <div key={y} className="absolute text-center"
-               style={{ left: pct(y), transform: 'translateX(-50%)', top: 3 }}>
-            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 9 }}>{y}</p>
-          </div>
-        ))}
-        <div className="absolute text-center"
-             style={{ left: '100%', transform: 'translateX(-100%)', top: 3 }}>
-          <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: 9, fontWeight: 600 }}>{NOW}</p>
         </div>
-      </div>
+      </button>
 
-      {/* Vintage quality legend row */}
-      {Object.keys(vintageQuality).length > 0 && (
-        <div className="px-4 pt-2 pb-1 flex items-center gap-3">
-          <span style={{ color: '#5a3040', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            Vintage quality
-          </span>
-          {([
-            { label: 'Exceptional', color: '#e8c96e' },
-            { label: 'Excellent',   color: '#c9a84c' },
-            { label: 'Good',        color: '#a07840' },
-          ] as const).map(({ label, color }) => (
-            <div key={label} className="flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: color }} />
-              <span style={{ color: '#5a3040', fontSize: 9 }}>{label}</span>
-            </div>
-          ))}
+      {/* ── Collapsed summary ── */}
+      {!expanded && (
+        <div className="px-4 pb-4">
+          <p className="text-xs" style={{ color: '#5a3040' }}>
+            {totalQty} bottle{totalQty !== 1 ? 's' : ''}
+            {noVintage > 0 ? ` · ${noVintage} without vintage` : ''}
+            {isDraft ? ` · ${10 - bottleCount} more to unlock full chart` : ''}
+            {' '}· Tap to expand
+          </p>
         </div>
       )}
 
-      {/* Best/worst vintage callout row */}
-      {Object.keys(vintageQuality).length > 0 && (() => {
-        const entries = Object.entries(vintageQuality)
-          .map(([y, s]) => ({ year: parseInt(y), score: s }))
-          .filter(e => e.year >= AXIS_START && e.year <= NOW)
-          .sort((a, b) => b.score - a.score)
-        const best  = entries[0]
-        const worst = entries[entries.length - 1]
-        if (!best || !worst || best.year === worst.year) return null
-        return (
-          <div className="mx-4 mb-3 mt-1 flex gap-2">
-            <div className="flex-1 rounded-lg px-2.5 py-1.5"
-                 style={{ background: 'rgba(232,201,110,0.1)', border: '1px solid rgba(232,201,110,0.2)' }}>
-              <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                Best vintage
-              </p>
-              <p className="font-bold" style={{ color: '#e8c96e', fontSize: 13 }}>
-                {best.year}
-                <span className="font-normal ml-1" style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10 }}>
-                  {best.score} pts · {qualityLabel(best.score)}
-                </span>
-              </p>
-            </div>
-            <div className="flex-1 rounded-lg px-2.5 py-1.5"
-                 style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                Weakest vintage
-              </p>
-              <p className="font-bold" style={{ color: 'rgba(255,255,255,0.55)', fontSize: 13 }}>
-                {worst.year}
-                <span className="font-normal ml-1" style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10 }}>
-                  {worst.score} pts · {qualityLabel(worst.score)}
-                </span>
-              </p>
-            </div>
+      {/* ── Expanded chart ── */}
+      {expanded && (
+        <>
+          {/* Legend */}
+          <div className="flex items-center gap-3 px-4 pb-3">
+            {typesPresent.map(type => (
+              <div key={type} className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-sm inline-block"
+                      style={{ background: WINE_TYPE_COLOURS[type] }} />
+                <span style={{ color: '#5a3040', fontSize: 10 }}>{type}</span>
+              </div>
+            ))}
+            {Object.keys(vintageQuality).length > 0 && (
+              <div className="flex items-center gap-1 ml-auto">
+                <span className="w-2 h-2 rounded-full inline-block" style={{ background: '#e8c96e' }} />
+                <span style={{ color: '#5a3040', fontSize: 10 }}>Vintage quality</span>
+              </div>
+            )}
           </div>
-        )
-      })()}
 
-      {/* Footer */}
-      <div className="px-4 pb-4">
-        {isDraft ? (
-          <p className="text-xs" style={{ color: '#7a4a54' }}>
-            Preview · Add {10 - bottleCount} more {10 - bottleCount === 1 ? 'bottle' : 'bottles'} to see your full breakdown
-          </p>
-        ) : (
-          <p className="text-xs" style={{ color: '#9a6070' }}>
-            {bottles.reduce((s, b) => s + b.quantity, 0)} bottles
-            {noVintage > 0 ? ` · ${noVintage} without vintage` : ''}
-          </p>
-        )}
-      </div>
+          {/* SVG chart */}
+          <div className="px-4 pb-1">
+            <svg
+              viewBox={`0 0 ${SVG_W} ${SVG_H}`}
+              width="100%"
+              style={{ display: 'block', overflow: 'visible' }}
+            >
+              {/* ── Y-axis grid lines + labels ── */}
+              {yTicks.map(val => {
+                const y = yFor(val)
+                return (
+                  <g key={val}>
+                    <line
+                      x1={Y_AXIS_W} y1={y} x2={SVG_W} y2={y}
+                      stroke="rgba(255,255,255,0.06)" strokeWidth="0.5"
+                    />
+                    <text
+                      x={Y_AXIS_W - 3} y={y + 3}
+                      textAnchor="end"
+                      fontSize="7"
+                      fill="rgba(255,255,255,0.3)"
+                    >
+                      {val}
+                    </text>
+                  </g>
+                )
+              })}
+
+              {/* ── Stacked bars ── */}
+              {yearData.map(({ year, counts, total }) => {
+                const x    = xFor(year) - barW / 2
+                let   yTop = BAR_H  // start from bottom
+                return (
+                  <g key={year} opacity={isDraft && total === 0 ? 0.3 : 1}>
+                    {total === 0 ? (
+                      <rect x={x} y={BAR_H - 2} width={barW} height={2}
+                            fill="#2a1018" opacity="0.5" rx="0.5" />
+                    ) : (
+                      TYPE_ORDER.map(type => {
+                        const count = counts[type] ?? 0
+                        if (!count) return null
+                        const segH = (count / maxTotal) * BAR_H
+                        yTop -= segH
+                        return (
+                          <rect key={type}
+                                x={x} y={yTop} width={barW} height={segH}
+                                fill={WINE_TYPE_COLOURS[type]}
+                                opacity={isDraft ? 0.65 : 1}
+                                rx="0.5" />
+                        )
+                      })
+                    )}
+                  </g>
+                )
+              })}
+
+              {/* ── Vintage quality line + dots ── */}
+              {Object.keys(vintageQuality).length > 0 && (() => {
+                const pts = years
+                  .filter(y => vintageQuality[y] != null)
+                  .map(y => ({
+                    x: xFor(y),
+                    y: BAR_H - 4 - qualityNorm(vintageQuality[y]) * (BAR_H - 8),
+                    score: vintageQuality[y],
+                  }))
+                return (
+                  <g>
+                    <polyline
+                      fill="none"
+                      stroke="rgba(232,201,110,0.25)"
+                      strokeWidth="1"
+                      points={pts.map(p => `${p.x},${p.y}`).join(' ')}
+                    />
+                    {pts.map(({ x, y, score }, i) => (
+                      <circle key={i} cx={x} cy={y} r="2"
+                              fill={qualityColor(score)} opacity="0.85" />
+                    ))}
+                  </g>
+                )
+              })()}
+
+              {/* ── X-axis year labels ── */}
+              {years.filter(y => y % 2 === 0).map(y => (
+                <text key={y}
+                      x={xFor(y)} y={BAR_H + X_AXIS_H - 2}
+                      textAnchor="middle"
+                      fontSize="7" fill="rgba(255,255,255,0.4)">
+                  {y}
+                </text>
+              ))}
+              <text
+                x={xFor(NOW)} y={BAR_H + X_AXIS_H - 2}
+                textAnchor="middle"
+                fontSize="7" fontWeight="600" fill="rgba(255,255,255,0.7)">
+                {NOW}
+              </text>
+            </svg>
+          </div>
+
+          {/* Footer */}
+          <div className="px-4 pb-4 pt-1">
+            {isDraft ? (
+              <p className="text-xs" style={{ color: '#7a4a54' }}>
+                Preview · Add {10 - bottleCount} more {10 - bottleCount === 1 ? 'bottle' : 'bottles'} to see your full breakdown
+              </p>
+            ) : (
+              <p className="text-xs" style={{ color: '#9a6070' }}>
+                {totalQty} bottles{noVintage > 0 ? ` · ${noVintage} without vintage` : ''}
+              </p>
+            )}
+          </div>
+        </>
+      )}
     </div>
   )
 }

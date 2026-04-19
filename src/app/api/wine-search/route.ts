@@ -20,6 +20,11 @@ export interface CatalogueWine {
   description: string
 }
 
+/** Strip accents: "Moët" → "Moet", "Château" → "Chateau" */
+function stripAccents(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+}
+
 export async function GET(req: NextRequest) {
   const q       = req.nextUrl.searchParams.get('q')?.trim()
   const variety = req.nextUrl.searchParams.get('variety')?.trim()
@@ -36,31 +41,53 @@ export async function GET(req: NextRequest) {
 
   // ── Full-text search on q ────────────────────────────────────
   if (q) {
-    // Convert the query into a tsquery (AND of all words)
-    const tsQuery = q
-      .split(/\s+/)
-      .filter(w => w.length > 1)
-      .map(w => `${w}:*`)   // prefix matching
-      .join(' & ')
+    // Try both the original query and an accent-stripped version so that
+    // "Moët" matches "Moet" in the catalogue (and vice versa).
+    const qNorm = stripAccents(q)
+
+    const buildTsQuery = (raw: string) =>
+      raw.split(/\s+/).filter(w => w.length > 1).map(w => `${w}:*`).join(' & ')
 
     const { data: fts } = await supabase
       .from('wine_catalogue')
       .select('id,title,winery,variety,country,province,region,vintage,points,price_usd,description')
-      .textSearch('search_vector', tsQuery, { type: 'websearch' })
+      .textSearch('search_vector', buildTsQuery(qNorm), { type: 'websearch' })
       .order('points', { ascending: false, nullsFirst: false })
       .limit(limit)
 
     if (fts && fts.length > 0) {
       data = fts as CatalogueWine[]
     } else {
-      // Fallback: ILIKE on title + winery
+      // Fallback 1: ILIKE on title + winery using both accented and stripped form
+      const ilikeQ = qNorm !== q ? qNorm : q
       const { data: ilike } = await supabase
         .from('wine_catalogue')
         .select('id,title,winery,variety,country,province,region,vintage,points,price_usd,description')
-        .or(`title.ilike.%${q}%,winery.ilike.%${q}%`)
+        .or(`title.ilike.%${ilikeQ}%,winery.ilike.%${ilikeQ}%,title.ilike.%${q}%,winery.ilike.%${q}%`)
         .order('points', { ascending: false, nullsFirst: false })
         .limit(limit)
-      data = (ilike ?? []) as CatalogueWine[]
+
+      if (ilike && ilike.length > 0) {
+        data = ilike as CatalogueWine[]
+      } else {
+        // Fallback 2: try each word independently (OR), catches partial matches
+        const words = qNorm.split(/\s+/).filter(w => w.length > 2)
+        if (words.length > 1) {
+          const orClauses = words.flatMap(w => [
+            `title.ilike.%${w}%`,
+            `winery.ilike.%${w}%`,
+          ]).join(',')
+          const { data: wordMatch } = await supabase
+            .from('wine_catalogue')
+            .select('id,title,winery,variety,country,province,region,vintage,points,price_usd,description')
+            .or(orClauses)
+            .order('points', { ascending: false, nullsFirst: false })
+            .limit(limit)
+          data = (wordMatch ?? []) as CatalogueWine[]
+        } else {
+          data = []
+        }
+      }
     }
   }
 
