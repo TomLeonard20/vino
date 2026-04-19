@@ -24,6 +24,7 @@ interface ScannedWine {
   criticScore: number | null
   price_aud: number | null
   source: string
+  imageUrl?: string | null
   wineType?: WineType
   drinkFrom?: number
   peak?: number
@@ -356,16 +357,17 @@ function WineConfirmSheet({
     const { data: wineRow, error: wineErr } = await supabase
       .from('wines')
       .insert({
-        user_id:      user.id,
-        cellar_id:    cellarId,
-        name:         cleanWineName(wine.name),
-        producer:     wine.producer,
-        region:       wine.region,
-        appellation:  wine.country,
-        vintage:      vintage ? parseInt(vintage) : wine.vintage,
-        grapes:       wine.grapes,
-        critic_score: wine.criticScore,
-        db_source:    wine.source,
+        user_id:         user.id,
+        cellar_id:       cellarId,
+        name:            cleanWineName(wine.name),
+        producer:        wine.producer,
+        region:          wine.region,
+        appellation:     wine.country,
+        vintage:         vintage ? parseInt(vintage) : wine.vintage,
+        grapes:          wine.grapes,
+        critic_score:    wine.criticScore,
+        db_source:       wine.source,
+        label_image_url: wine.imageUrl ?? null,
       })
       .select()
       .single()

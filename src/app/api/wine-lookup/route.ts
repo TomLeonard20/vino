@@ -13,6 +13,7 @@ export interface WineLookupResult {
   criticScore: number | null
   price_aud:   number | null
   source:      string
+  imageUrl?:   string | null   // bottle photo from Open Food Facts barcode lookup
 }
 
 function extractVintage(text: string): number | null {
@@ -34,6 +35,7 @@ async function tryOpenFoodFacts(barcode: string): Promise<WineLookupResult | nul
     const name = p.product_name ?? p.abbreviated_product_name ?? ''
     if (!name) return null
 
+    const imageUrl = p.image_front_url ?? p.image_url ?? null
     return {
       name,
       producer:    p.brands ?? '',
@@ -44,6 +46,7 @@ async function tryOpenFoodFacts(barcode: string): Promise<WineLookupResult | nul
       criticScore: null,
       price_aud:   null,
       source:      'Open Food Facts',
+      imageUrl:    imageUrl && typeof imageUrl === 'string' ? imageUrl : null,
     }
   } catch {
     return null

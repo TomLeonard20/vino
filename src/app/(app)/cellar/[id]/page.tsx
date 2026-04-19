@@ -52,10 +52,21 @@ export default async function WineDetailPage({
   const myNotes      = notes.filter((n: TastingNote) => n.user_id === user?.id)
   const partnerNotes = notes.filter((n: TastingNote) => n.user_id !== user?.id)
 
-  // ── Wine photo: stored URL → Open Food Facts → null (SVG fallback) ──
-  const winePhotoUrl: string | null =
-    wine.label_image_url ??
-    await fetchWinePhoto(wine.name ?? '', wine.producer ?? '')
+  // ── Wine photo: stored URL → Open Food Facts text search → null ──
+  // If found via text search and not yet stored, persist it so the
+  // cellar list shows it on next load without another API call.
+  let winePhotoUrl: string | null = wine.label_image_url ?? null
+  if (!winePhotoUrl) {
+    const fetched = await fetchWinePhoto(wine.name ?? '', wine.producer ?? '')
+    if (fetched) {
+      winePhotoUrl = fetched
+      // Write-back: cache in DB so future loads skip the external fetch
+      await supabase
+        .from('wines')
+        .update({ label_image_url: fetched })
+        .eq('id', wine.id)
+    }
+  }
 
   // ── Drinking window ───────────────────────────────────────────
   const hasWindow = !!(b.drink_from && b.drink_to && b.peak)
