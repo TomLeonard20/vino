@@ -62,12 +62,13 @@ const COPY = {
 type Lang = keyof typeof COPY
 
 interface Props {
-  name:         string | null
-  totalBottles: number
-  drinkSoon:    number
-  noteCount:    number
-  allBottles:   CellarBottle[]
-  recentNotes:  TastingNote[]
+  name:           string | null
+  totalBottles:   number
+  drinkSoon:      number
+  noteCount:      number
+  allBottles:     CellarBottle[]
+  recentNotes:    TastingNote[]
+  vintageQuality: Record<number, number>
 }
 
 function SetNamePrompt() {
@@ -119,7 +120,7 @@ function SetNamePrompt() {
   )
 }
 
-export default function HomeClient({ name, totalBottles, drinkSoon, noteCount, allBottles, recentNotes }: Props) {
+export default function HomeClient({ name, totalBottles, drinkSoon, noteCount, allBottles, recentNotes, vintageQuality }: Props) {
   const [lang, setLang] = useState<Lang>('en')
   const hour = new Date().getHours()
 
@@ -171,24 +172,12 @@ export default function HomeClient({ name, totalBottles, drinkSoon, noteCount, a
       </div>
 
       {/* ── Cellar balance chart ── */}
-      {totalBottles >= 10 ? (
-        <CellarBalanceChart bottles={allBottles} />
-      ) : (
-        <div className="rounded-2xl px-4 py-5 flex items-center gap-3"
-             style={{ background: '#ecddd4', border: '1.5px dashed #c4a090' }}>
-          {/* Chart SVG icon */}
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#a07060" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="12" width="4" height="9"/><rect x="10" y="7" width="4" height="14"/>
-            <rect x="17" y="3" width="4" height="18"/>
-          </svg>
-          <div>
-            <p className="text-sm font-semibold" style={{ color: '#3a1a20' }}>{t.chartTitle}</p>
-            <p className="text-xs mt-0.5" style={{ color: '#a07060' }}>
-              {t.chartUnlock(totalBottles)}
-            </p>
-          </div>
-        </div>
-      )}
+      <CellarBalanceChart
+        bottles={allBottles}
+        vintageQuality={vintageQuality}
+        isDraft={totalBottles < 10}
+        bottleCount={totalBottles}
+      />
 
       {/* ── Add a bottle ── */}
       <div className="rounded-xl p-4 space-y-3" style={{ background: '#ecddd4' }}>
