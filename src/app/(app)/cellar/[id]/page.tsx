@@ -1,10 +1,54 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
+import { Suspense } from 'react'
 import type { CellarBottle, TastingNote, FlavourProfile, WineType } from '@/types/database'
 import DrinkingWindowChart from '@/components/ui/DrinkingWindowChart'
 import WineBottleImage     from '@/components/ui/WineBottleImage'
 import Link from 'next/link'
 import { fetchWinePhoto } from '@/lib/wine-photo'
+
+// ── Async photo slot — streams in without blocking the page ───
+// Shows SVG immediately via Suspense fallback; replaces with real
+// photo when the Open Food Facts fetch completes.
+async function WinePhotoAsync({
+  wineId,
+  name,
+  producer,
+  wineType,
+  storedUrl,
+}: {
+  wineId:     string
+  name:       string
+  producer:   string
+  wineType:   WineType
+  storedUrl:  string | null
+}) {
+  let url = storedUrl
+  if (!url) {
+    const fetched = await fetchWinePhoto(name, producer)
+    if (fetched) {
+      url = fetched
+      const supabase = await createClient()
+      await supabase.from('wines').update({ label_image_url: fetched }).eq('id', wineId)
+    }
+  }
+
+  if (url) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={url}
+        alt={name}
+        style={{ width: 96, height: 140, objectFit: 'cover', display: 'block' }}
+      />
+    )
+  }
+  return (
+    <div style={{ width: 96, height: 140 }}>
+      <WineBottleImage type={wineType} transparent width={72} height={120} />
+    </div>
+  )
+}
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -51,22 +95,6 @@ export default async function WineDetailPage({
   const fp           = wine.flavour_profile as FlavourProfile | null
   const myNotes      = notes.filter((n: TastingNote) => n.user_id === user?.id)
   const partnerNotes = notes.filter((n: TastingNote) => n.user_id !== user?.id)
-
-  // ── Wine photo: stored URL → Open Food Facts text search → null ──
-  // If found via text search and not yet stored, persist it so the
-  // cellar list shows it on next load without another API call.
-  let winePhotoUrl: string | null = wine.label_image_url ?? null
-  if (!winePhotoUrl) {
-    const fetched = await fetchWinePhoto(wine.name ?? '', wine.producer ?? '')
-    if (fetched) {
-      winePhotoUrl = fetched
-      // Write-back: cache in DB so future loads skip the external fetch
-      await supabase
-        .from('wines')
-        .update({ label_image_url: fetched })
-        .eq('id', wine.id)
-    }
-  }
 
   // ── Drinking window ───────────────────────────────────────────
   const hasWindow = !!(b.drink_from && b.drink_to && b.peak)
@@ -132,28 +160,24 @@ export default async function WineDetailPage({
       <div className="px-4 pt-5 pb-6" style={{ background: '#8b2035' }}>
         <div className="flex gap-4 items-start">
 
-          {/* ── Left: bottle photo or SVG illustration ── */}
+          {/* ── Left: bottle photo (streams in, SVG shown immediately) ── */}
           <div
             className="shrink-0 rounded-xl overflow-hidden"
             style={{ width: 96, minHeight: 140, background: 'rgba(0,0,0,0.2)' }}
           >
-            {winePhotoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={winePhotoUrl}
-                alt={wine.name}
-                style={{ width: 96, height: 140, objectFit: 'cover', display: 'block' }}
-              />
-            ) : (
+            <Suspense fallback={
               <div style={{ width: 96, height: 140 }}>
-                <WineBottleImage
-                  type={b.wine_type as WineType}
-                  transparent
-                  width={72}
-                  height={120}
-                />
+                <WineBottleImage type={b.wine_type as WineType} transparent width={72} height={120} />
               </div>
-            )}
+            }>
+              <WinePhotoAsync
+                wineId={wine.id}
+                name={wine.name ?? ''}
+                producer={wine.producer ?? ''}
+                wineType={b.wine_type as WineType}
+                storedUrl={wine.label_image_url ?? null}
+              />
+            </Suspense>
           </div>
 
           {/* ── Right: name + key details ── */}

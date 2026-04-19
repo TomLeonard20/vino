@@ -6,7 +6,6 @@ import CellarSwitcher   from './CellarSwitcher'
 import FilterSortBar    from './FilterSortBar'
 import AddBottleButtons from './AddBottleButtons'
 import Link from 'next/link'
-import { fetchWinePhoto } from '@/lib/wine-photo'
 import {
   parseFiltersFromSearchParams,
   parseSortFromSearchParams,
@@ -110,21 +109,6 @@ export default async function CellarPage({
 
   const { data } = await query
   const allBottles = (data ?? []) as CellarBottle[]
-
-  // ── Batch-fetch real bottle photos (2 s timeout, cached 24 h per wine) ─
-  // Deduplicate by wine_id so we don't call Open Food Facts N times for N
-  // bottles of the same wine.
-  const uniqueWineIds = [...new Set(allBottles.map(b => b.wine_id).filter(Boolean))]
-  const photoEntries  = await Promise.all(
-    uniqueWineIds.map(async wineId => {
-      const b    = allBottles.find(x => x.wine_id === wineId)!
-      const wine = b.wine as any
-      const url  = wine?.label_image_url
-        ?? await fetchWinePhoto(wine?.name ?? '', wine?.producer ?? '', 2000)
-      return [wineId, url] as const
-    })
-  )
-  const winePhotoMap = Object.fromEntries(photoEntries)
 
   // ── Compute available filter options ──────────────────────────
   const options = computeOptions(allBottles)
@@ -366,7 +350,7 @@ export default async function CellarPage({
                 {groupLabel(group.type)}
               </h3>
               {group.bottles.map(bottle => (
-                <SwipeToDeleteCard key={bottle.id} bottle={bottle} currentUserId={user?.id} photoUrl={winePhotoMap[bottle.wine_id] ?? null} />
+                <SwipeToDeleteCard key={bottle.id} bottle={bottle} currentUserId={user?.id} />
               ))}
             </div>
           ))}
