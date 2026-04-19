@@ -51,9 +51,11 @@ function MiniCell({ label, value }: { label: string; value: string }) {
 export default function CellarBottleCard({
   bottle,
   currentUserId,
+  photoUrl,
 }: {
-  bottle:        CellarBottle
+  bottle:         CellarBottle
   currentUserId?: string
+  photoUrl?:      string | null
 }) {
   const wine = bottle.wine as {
     name?:            string
@@ -67,6 +69,7 @@ export default function CellarBottleCard({
 
   const { label, color } = smartPeakLabel(bottle)
   const isPartnerBottle  = !!(bottle.added_by && currentUserId && bottle.added_by !== currentUserId)
+  const resolvedPhoto    = photoUrl ?? wine?.label_image_url ?? null
 
   return (
     <Link
@@ -74,12 +77,18 @@ export default function CellarBottleCard({
       className="rounded-xl overflow-hidden flex items-stretch active:opacity-70 transition-opacity"
       style={{ background: '#ecddd4' }}
     >
-      {/* Wine bottle illustration (or label photo if available) */}
+      {/* Bottle photo or SVG illustration */}
       <div className="shrink-0 self-stretch" style={{ width: 52 }}>
-        <WineBottleImage
-          type={bottle.wine_type}
-          labelImageUrl={wine?.label_image_url}
-        />
+        {resolvedPhoto ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={resolvedPhoto}
+            alt=""
+            style={{ width: 52, height: '100%', objectFit: 'cover', display: 'block' }}
+          />
+        ) : (
+          <WineBottleImage type={bottle.wine_type} />
+        )}
       </div>
 
       <WineTypeBar type={bottle.wine_type} />

@@ -10,9 +10,11 @@ const DELETE_ZONE = 80  // px
 export default function SwipeToDeleteCard({
   bottle,
   currentUserId,
+  photoUrl,
 }: {
   bottle:         CellarBottle
   currentUserId?: string
+  photoUrl?:      string | null
 }) {
   const [translateX, setTranslateX] = useState(0)
   const [swiped,     setSwiped]     = useState(false)
@@ -122,7 +124,7 @@ export default function SwipeToDeleteCard({
           zIndex:     1,
         }}
       >
-        <CellarBottleCard bottle={bottle} currentUserId={currentUserId} />
+        <CellarBottleCard bottle={bottle} currentUserId={currentUserId} photoUrl={photoUrl} />
       </div>
 
       {/* Tap backdrop to dismiss swipe */}

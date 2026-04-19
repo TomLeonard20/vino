@@ -4,28 +4,7 @@ import type { CellarBottle, TastingNote, FlavourProfile, WineType } from '@/type
 import DrinkingWindowChart from '@/components/ui/DrinkingWindowChart'
 import WineBottleImage     from '@/components/ui/WineBottleImage'
 import Link from 'next/link'
-
-// ── Professional wine photo lookup ───────────────────────────
-// Searches Open Food Facts by wine name + producer, caches 24 h.
-async function fetchWinePhoto(name: string, producer: string): Promise<string | null> {
-  try {
-    const q   = encodeURIComponent(`${producer} ${name}`.trim())
-    const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${q}&search_simple=1&action=process&json=1&page_size=5`
-    const res = await fetch(url, {
-      next:   { revalidate: 86400 },                // cache per unique wine for 24 h
-      signal: AbortSignal.timeout(4000),
-    })
-    if (!res.ok) return null
-    const data = await res.json()
-    const products: any[] = data.products ?? []
-    // Prefer products that have a front image and look like wine
-    for (const p of products) {
-      const img = p.image_front_url ?? p.image_url
-      if (img && typeof img === 'string' && img.startsWith('http')) return img
-    }
-  } catch { /* timeout or network error — silently fall back */ }
-  return null
-}
+import { fetchWinePhoto } from '@/lib/wine-photo'
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -166,31 +145,15 @@ export default async function WineDetailPage({
             )}
           </div>
 
-          {/* ── Right: name, score, details ── */}
+          {/* ── Right: name + key details ── */}
           <div className="flex-1 min-w-0">
 
-            {/* Name + critic score row */}
-            <div className="flex items-start justify-between gap-2">
-              <h1 className="text-xl font-bold text-white leading-tight flex-1">
-                {wine.name}
-              </h1>
-              {wine.critic_score && (
-                <div className="text-right shrink-0">
-                  <div className="text-4xl font-bold leading-none" style={{ color: '#e8c96e' }}>
-                    {wine.critic_score}
-                  </div>
-                  <div
-                    className="text-xs uppercase tracking-widest mt-0.5"
-                    style={{ color: 'rgba(255,255,255,0.4)', letterSpacing: '0.08em' }}
-                  >
-                    pts
-                  </div>
-                </div>
-              )}
-            </div>
+            <h1 className="text-xl font-bold text-white leading-tight">
+              {wine.name}
+            </h1>
 
             {/* Key details — compact rows */}
-            <div className="mt-3 space-y-1.5">
+            <div className="mt-2 space-y-1.5">
               {wine.producer && (
                 <HeroRow label="Producer" value={wine.producer} />
               )}
@@ -199,19 +162,6 @@ export default async function WineDetailPage({
               )}
               {wine.vintage && (
                 <HeroRow label="Vintage" value={String(wine.vintage)} />
-              )}
-              {b.purchase_price != null && (
-                <HeroRow label="Purchased" value={`A$${b.purchase_price} · ${purchaseDate}`} />
-              )}
-              {b.market_price != null && (
-                <HeroRow label="Market" value={`A$${b.market_price}`} />
-              )}
-              {valueChange !== null && valuePct !== null && (
-                <HeroRow
-                  label="Value"
-                  value={`${valueChange >= 0 ? '+' : ''}A$${Math.abs(Math.round(valueChange))} (${valuePct >= 0 ? '+' : ''}${valuePct}%)`}
-                  valueColor={valueChange >= 0 ? '#86efac' : '#fca5a5'}
-                />
               )}
             </div>
 
@@ -230,6 +180,43 @@ export default async function WineDetailPage({
               </div>
             )}
           </div>
+        </div>
+
+        {/* ── Stat strip: score · paid · est. value · gain ── */}
+        <div className="mt-4 grid grid-cols-4 gap-2">
+          <StatChip
+            label="Score"
+            value={wine.critic_score ? `${wine.critic_score}` : '—'}
+            unit={wine.critic_score ? 'pts' : undefined}
+            highlight={!!wine.critic_score}
+          />
+          <StatChip
+            label="Paid"
+            value={b.purchase_price != null ? `A$${b.purchase_price}` : '—'}
+            sub={b.purchase_price != null ? purchaseDate : undefined}
+          />
+          <StatChip
+            label="Est. value"
+            value={b.market_price != null ? `A$${b.market_price}` : '—'}
+          />
+          <StatChip
+            label="Gain"
+            value={
+              valuePct !== null
+                ? `${valuePct >= 0 ? '+' : ''}${valuePct}%`
+                : '—'
+            }
+            valueColor={
+              valuePct === null ? undefined
+              : valuePct >= 0   ? '#86efac'
+              : '#fca5a5'
+            }
+            sub={
+              valueChange !== null
+                ? `${valueChange >= 0 ? '+' : '−'}A$${Math.abs(Math.round(valueChange))}`
+                : undefined
+            }
+          />
         </div>
       </div>
 
@@ -384,6 +371,50 @@ export default async function WineDetailPage({
 }
 
 // ── Sub-components ────────────────────────────────────────────
+
+function StatChip({
+  label,
+  value,
+  unit,
+  sub,
+  valueColor,
+  highlight,
+}: {
+  label:       string
+  value:       string
+  unit?:       string
+  sub?:        string
+  valueColor?: string
+  highlight?:  boolean
+}) {
+  return (
+    <div
+      className="rounded-xl px-2 py-2 flex flex-col items-center text-center"
+      style={{ background: 'rgba(0,0,0,0.22)' }}
+    >
+      <span className="text-xs mb-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>{label}</span>
+      <span
+        className="font-bold leading-none"
+        style={{
+          fontSize: 15,
+          color: valueColor ?? (highlight ? '#e8c96e' : 'white'),
+        }}
+      >
+        {value}
+        {unit && (
+          <span className="text-xs font-normal ml-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+            {unit}
+          </span>
+        )}
+      </span>
+      {sub && (
+        <span className="text-xs mt-0.5 leading-none" style={{ color: 'rgba(255,255,255,0.45)', fontSize: 9 }}>
+          {sub}
+        </span>
+      )}
+    </div>
+  )
+}
 
 function HeroRow({
   label,
