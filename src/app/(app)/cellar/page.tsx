@@ -265,7 +265,7 @@ export default async function CellarPage({
             : allBottles.filter(b => b.wine_type === type).reduce((s, b) => s + b.quantity, 0)
           const active = activeFilter === type
           return (
-            <a
+            <Link
               key={type}
               href={hrefWithType(type)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap border transition-colors"
@@ -281,7 +281,7 @@ export default async function CellarPage({
               )}
               {type}
               <span className="text-xs opacity-70">({count})</span>
-            </a>
+            </Link>
           )
         })}
       </div>
@@ -301,7 +301,7 @@ export default async function CellarPage({
       {chips.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {chips.map(chip => (
-            <a
+            <Link
               key={chip.href + chip.label}
               href={chip.href}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border"
@@ -309,16 +309,16 @@ export default async function CellarPage({
             >
               {chip.label}
               <span style={{ color: '#8b2035', fontSize: 11 }}>✕</span>
-            </a>
+            </Link>
           ))}
           {chips.length > 1 && (
-            <a
+            <Link
               href={buildFilterUrl(base, { window: [], grapes: [], vintage: [], producer: [], country: [], region: [], scoreMin: null, scoreMax: null })}
               className="flex items-center px-3 py-1.5 rounded-full text-xs font-medium"
               style={{ color: '#8b2035' }}
             >
               Clear all
-            </a>
+            </Link>
           )}
         </div>
       )}
@@ -332,13 +332,13 @@ export default async function CellarPage({
               : 'Your cellar is empty. Add your first wine!'}
           </p>
           {filterBadge > 0 && (
-            <a
+            <Link
               href={buildFilterUrl(base, { window: [], grapes: [], vintage: [], producer: [], country: [], region: [], scoreMin: null, scoreMax: null })}
               className="inline-block text-sm font-medium"
               style={{ color: '#8b2035' }}
             >
               Clear all filters
-            </a>
+            </Link>
           )}
           {!filterBadge && <AddBottleButtons />}
         </div>
