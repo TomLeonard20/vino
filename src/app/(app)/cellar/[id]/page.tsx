@@ -39,13 +39,20 @@ async function WinePhotoAsync({
       <img
         src={url}
         alt={name}
-        style={{ width: 96, height: 140, objectFit: 'cover', display: 'block' }}
+        style={{
+          width: '100%',
+          height: '100%',
+          objectFit: 'contain',
+          objectPosition: 'center bottom',
+          display: 'block',
+          padding: '8px 6px 4px',
+        }}
       />
     )
   }
   return (
-    <div style={{ width: 96, height: 140 }}>
-      <WineBottleImage type={wineType} transparent width={72} height={120} />
+    <div className="w-full h-full flex items-end justify-center pb-1">
+      <WineBottleImage type={wineType} transparent width={68} height={128} />
     </div>
   )
 }
@@ -168,12 +175,17 @@ export default async function WineDetailPage({
 
           {/* ── Left: bottle photo (streams in, SVG shown immediately) ── */}
           <div
-            className="shrink-0 rounded-xl overflow-hidden"
-            style={{ width: 96, minHeight: 140, background: 'rgba(0,0,0,0.2)' }}
+            className="shrink-0 rounded-2xl overflow-hidden"
+            style={{
+              width: 110,
+              height: 180,
+              background: 'white',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.35)',
+            }}
           >
             <Suspense fallback={
-              <div style={{ width: 96, height: 140 }}>
-                <WineBottleImage type={b.wine_type as WineType} transparent width={72} height={120} />
+              <div className="w-full h-full flex items-end justify-center pb-1">
+                <WineBottleImage type={b.wine_type as WineType} transparent width={68} height={128} />
               </div>
             }>
               <WinePhotoAsync

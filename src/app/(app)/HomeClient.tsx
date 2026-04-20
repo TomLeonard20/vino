@@ -6,8 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import ScoreBadge from '@/components/ui/ScoreBadge'
 import StarRating from '@/components/ui/StarRating'
-import CellarBalanceChart from '@/components/ui/CellarBalanceChart'
-import type { CellarBottle, TastingNote, WineType } from '@/types/database'
+import type { TastingNote, WineType } from '@/types/database'
 
 const WINE_TYPE_BAR_COLOURS: Record<WineType, string> = {
   Red:       '#8b2035',
@@ -50,13 +49,13 @@ const COPY = {
 type Lang = keyof typeof COPY
 
 interface Props {
-  name:           string | null
-  totalBottles:   number
-  drinkSoon:      number
-  noteCount:      number
-  allBottles:     CellarBottle[]
-  recentNotes:    TastingNote[]
-  vintageQuality: Record<number, number>
+  name:         string | null
+  totalBottles: number
+  drinkSoon:    number
+  noteCount:    number
+  recentNotes:  TastingNote[]
+  /** Chart rendered server-side and streamed in via Suspense */
+  chartSlot:    React.ReactNode
 }
 
 function SetNamePrompt() {
@@ -108,7 +107,7 @@ function SetNamePrompt() {
   )
 }
 
-export default function HomeClient({ name, totalBottles, drinkSoon, noteCount, allBottles, recentNotes, vintageQuality }: Props) {
+export default function HomeClient({ name, totalBottles, drinkSoon, noteCount, recentNotes, chartSlot }: Props) {
   const [lang, setLang] = useState<Lang>('en')
   const [aiTab, setAiTab] = useState<'pair' | 'find'>('pair')
   const hour = new Date().getHours()
@@ -160,13 +159,8 @@ export default function HomeClient({ name, totalBottles, drinkSoon, noteCount, a
         </Link>
       </div>
 
-      {/* ── Cellar balance chart ── */}
-      <CellarBalanceChart
-        bottles={allBottles}
-        vintageQuality={vintageQuality}
-        isDraft={totalBottles < 10}
-        bottleCount={totalBottles}
-      />
+      {/* ── Cellar balance chart (streamed in via Suspense) ── */}
+      {chartSlot}
 
       {/* ── Add a bottle ── */}
       <div className="rounded-xl p-4 space-y-3" style={{ background: '#ecddd4' }}>

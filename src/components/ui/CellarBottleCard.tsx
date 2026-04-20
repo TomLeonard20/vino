@@ -99,13 +99,23 @@ export default function CellarBottleCard({
       style={{ background: '#ecddd4' }}
     >
       {/* Bottle photo or SVG illustration */}
-      <div className="shrink-0 self-stretch" style={{ width: 52 }}>
+      <div
+        className="shrink-0 self-stretch flex items-end justify-center"
+        style={{ width: 58, background: '#f8f4f0', paddingBottom: 4, paddingTop: 6 }}
+      >
         {resolvedPhoto ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={resolvedPhoto}
             alt=""
-            style={{ width: 52, height: '100%', objectFit: 'cover', display: 'block' }}
+            style={{
+              width: 46,
+              height: '90%',
+              maxHeight: 96,
+              objectFit: 'contain',
+              objectPosition: 'center bottom',
+              display: 'block',
+            }}
           />
         ) : (
           <WineBottleImage type={bottle.wine_type} />

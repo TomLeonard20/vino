@@ -16,31 +16,15 @@ const X_AXIS_H = 16    // space below bars for year labels
 const Y_AXIS_W = 22    // space left of bars for bottle-count labels
 const SVG_H    = BAR_H + X_AXIS_H
 
-// Critic score range for normalising the quality line
-const SCORE_MIN = 82
-const SCORE_MAX = 97
-
-function qualityColor(score: number): string {
-  if (score >= 95) return '#e8c96e'
-  if (score >= 92) return '#c9a84c'
-  if (score >= 89) return '#a07840'
-  return '#7a5830'
-}
-
-function qualityNorm(score: number): number {
-  return Math.max(0, Math.min(1, (score - SCORE_MIN) / (SCORE_MAX - SCORE_MIN)))
-}
 
 export default function CellarBalanceChart({
   bottles,
-  vintageQuality = {},
   isDraft = false,
   bottleCount = 0,
 }: {
-  bottles:         CellarBottle[]
-  vintageQuality?: Record<number, number>
-  isDraft?:        boolean
-  bottleCount?:    number
+  bottles:     CellarBottle[]
+  isDraft?:    boolean
+  bottleCount?: number
 }) {
   const [expanded, setExpanded] = useState(false)
 
@@ -145,12 +129,6 @@ export default function CellarBalanceChart({
                 <span style={{ color: '#5a3040', fontSize: 10 }}>{type}</span>
               </div>
             ))}
-            {Object.keys(vintageQuality).length > 0 && (
-              <div className="flex items-center gap-1 ml-auto">
-                <span className="w-2 h-2 rounded-full inline-block" style={{ background: '#e8c96e' }} />
-                <span style={{ color: '#5a3040', fontSize: 10 }}>Vintage quality</span>
-              </div>
-            )}
           </div>
 
           {/* SVG chart */}
@@ -209,30 +187,6 @@ export default function CellarBalanceChart({
                 )
               })}
 
-              {/* ── Vintage quality line + dots ── */}
-              {Object.keys(vintageQuality).length > 0 && (() => {
-                const pts = years
-                  .filter(y => vintageQuality[y] != null)
-                  .map(y => ({
-                    x: xFor(y),
-                    y: BAR_H - 4 - qualityNorm(vintageQuality[y]) * (BAR_H - 8),
-                    score: vintageQuality[y],
-                  }))
-                return (
-                  <g>
-                    <polyline
-                      fill="none"
-                      stroke="rgba(232,201,110,0.25)"
-                      strokeWidth="1"
-                      points={pts.map(p => `${p.x},${p.y}`).join(' ')}
-                    />
-                    {pts.map(({ x, y, score }, i) => (
-                      <circle key={i} cx={x} cy={y} r="2"
-                              fill={qualityColor(score)} opacity="0.85" />
-                    ))}
-                  </g>
-                )
-              })()}
 
               {/* ── X-axis year labels ── */}
               {years.filter(y => y % 2 === 0).map(y => (
