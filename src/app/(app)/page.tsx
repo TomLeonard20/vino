@@ -15,17 +15,21 @@ export default async function HomePage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
+  // Minimal selects — home page only needs totals, drink-soon count, and
+  // the chart (which groups by wine_type + wine.vintage).
   const [{ data: bottles }, { data: notes }] = await Promise.all([
-    supabase.from('cellar_bottles').select('*, wine:wines(*)'),
+    supabase
+      .from('cellar_bottles')
+      .select('id,wine_type,quantity,drink_from,peak,drink_to,wine:wines(id,vintage)'),
     supabase
       .from('tasting_notes')
-      .select('*, wine:wines(*)')
+      .select('id,score,stars,free_text,tasted_at,wine:wines(id,name)')
       .order('tasted_at', { ascending: false })
       .limit(2),
   ])
 
-  const allBottles  = (bottles ?? []) as CellarBottle[]
-  const recentNotes = (notes   ?? []) as TastingNote[]
+  const allBottles  = (bottles ?? []) as unknown as CellarBottle[]
+  const recentNotes = (notes   ?? []) as unknown as TastingNote[]
 
   const totalBottles = allBottles.reduce((s, b) => s + b.quantity, 0)
   const drinkSoon    = allBottles.filter(b => {
