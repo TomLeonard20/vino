@@ -2,16 +2,12 @@
  * Wine bottle photo fetcher.
  *
  * Source priority:
- *  1. Bing Image Search        (BING_IMAGE_API_KEY   — Azure free tier, 1 000 calls/month)
- *  2. Brave Image Search       (BRAVE_SEARCH_API_KEY — api.search.brave.com, 2 000/month free)
- *  3. Google Custom Search     (GOOGLE_API_KEY + GOOGLE_CSE_ID — 100 free/day, no credit card)
- *                                Setup (5 min):
- *                                  a) console.cloud.google.com → New project → Enable
- *                                     "Custom Search JSON API" → Create API key → copy to GOOGLE_API_KEY
- *                                  b) cse.google.com → New search engine → "Search the entire web"
- *                                     → turn on "Image search" → copy the CX ID to GOOGLE_CSE_ID
- *  4. DuckDuckGo Images        (no key — works locally but blocked on Vercel, silently skipped)
- *  5. Open Food Facts          (no key — wine-category filtered fallback)
+ *  1. Bing Image Search   (BING_IMAGE_API_KEY   — Azure free tier, 1 000 calls/month)
+ *  2. Brave Image Search  (BRAVE_SEARCH_API_KEY — api.search.brave.com, 2 000/month free)
+ *  3. Serper.dev          (SERPER_API_KEY       — 2 500 free Google Image searches/month,
+ *                           sign up at serper.dev with email only — no credit card, no OAuth)
+ *  4. DuckDuckGo Images   (no key — works locally but blocked on Vercel, silently skipped)
+ *  5. Open Food Facts     (no key — wine-category filtered fallback)
  *
  * Once a URL is fetched it is written back to wines.label_image_url in the DB,
  * so each wine is only ever fetched once.
@@ -65,29 +61,35 @@ async function fetchFromBrave(query: string, timeoutMs: number): Promise<string 
   return null
 }
 
-// ── 3. Google Custom Search Images ───────────────────────────────────────────
-// Free: 100 queries/day, no credit card.
-// Setup:
-//   a) console.cloud.google.com → New project → Enable "Custom Search JSON API"
-//      → Credentials → Create API key → add as GOOGLE_API_KEY
-//   b) cse.google.com → New search engine → "Search the entire web"
-//      → enable "Image search" → copy CX ID → add as GOOGLE_CSE_ID
-async function fetchFromGoogle(query: string, timeoutMs: number): Promise<string | null> {
-  const key = process.env.GOOGLE_API_KEY
-  const cx  = process.env.GOOGLE_CSE_ID
-  if (!key || !cx) return null
+// ── 3. Serper.dev Google Image Search ────────────────────────────────────────
+// Free: 2 500 queries/month, email sign-up only (no credit card, no OAuth).
+// Sign up at https://serper.dev → Dashboard → API Key → copy to SERPER_API_KEY
+async function fetchFromSerper(query: string, timeoutMs: number): Promise<string | null> {
+  const key = process.env.SERPER_API_KEY
+  if (!key) return null
   try {
-    const q   = encodeURIComponent(`${query} wine bottle`)
-    const url = `https://www.googleapis.com/customsearch/v1?key=${key}&cx=${cx}&q=${q}&searchType=image&num=5&imgType=photo&imgSize=large&safe=active`
-    const res = await fetch(url, {
+    const res = await fetch('https://google.serper.dev/images', {
+      method:  'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-KEY':    key,
+      },
+      body:   JSON.stringify({ q: `${query} wine bottle`, num: 5 }),
       next:   { revalidate: 86400 },
       signal: AbortSignal.timeout(timeoutMs),
     })
     if (!res.ok) return null
     const data = await res.json()
-    for (const item of (data.items ?? []) as Array<{ link?: string }>) {
-      const img = item.link
-      if (img && img.startsWith('http')) return img
+    for (const item of (data.images ?? []) as Array<{
+      imageUrl?: string
+      imageWidth?:  number
+      imageHeight?: number
+    }>) {
+      const img = item.imageUrl
+      if (!img || !img.startsWith('http')) continue
+      // Prefer portrait images (taller than wide) — typical for bottle shots
+      if (item.imageWidth && item.imageHeight && item.imageWidth > item.imageHeight * 1.5) continue
+      return img
     }
   } catch { }
   return null
@@ -187,8 +189,8 @@ export async function fetchWinePhoto(
   const brave = await fetchFromBrave(query, timeoutMs)
   if (brave) return brave
 
-  const google = await fetchFromGoogle(query, timeoutMs)
-  if (google) return google
+  const serper = await fetchFromSerper(query, timeoutMs)
+  if (serper) return serper
 
   // Zero-credential sources (DDG is blocked on Vercel but harmless to try)
   const ddg = await fetchFromDuckDuckGo(query, timeoutMs)
