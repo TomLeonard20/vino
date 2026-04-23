@@ -6,6 +6,7 @@ import DrinkingWindowChart from '@/components/ui/DrinkingWindowChart'
 import WineBottleImage     from '@/components/ui/WineBottleImage'
 import Link from 'next/link'
 import { fetchWinePhoto } from '@/lib/wine-photo'
+import EditBottleSheet from './EditBottleSheet'
 
 // ── Async photo slot — streams in without blocking the page ───
 // Shows SVG immediately via Suspense fallback; replaces with real
@@ -154,7 +155,7 @@ export default async function WineDetailPage({
 
       {/* ── Back nav ── */}
       <div
-        className="flex items-center px-4 pt-5 pb-3"
+        className="flex items-center justify-between px-4 pt-5 pb-3"
         style={{ background: '#f5ede6' }}
       >
         <Link
@@ -164,6 +165,18 @@ export default async function WineDetailPage({
         >
           ‹ Cellar
         </Link>
+        <EditBottleSheet
+          bottleId={b.id}
+          quantity={b.quantity}
+          purchasePrice={b.purchase_price}
+          purchaseDate={b.purchase_date}
+          drinkFrom={b.drink_from}
+          peak={b.peak}
+          drinkTo={b.drink_to}
+          estimatedFrom={drinkWindow.drinkFrom}
+          estimatedPeak={drinkWindow.peak}
+          estimatedTo={drinkWindow.drinkTo}
+        />
       </div>
 
       {/* ════════════════════════════════════════════════════════

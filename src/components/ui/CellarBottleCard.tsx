@@ -2,9 +2,10 @@
 
 import Link from 'next/link'
 import type { CellarBottle, WineType } from '@/types/database'
-import ScoreBadge       from './ScoreBadge'
-import WineTypeBar      from './WineTypeBar'
-import WineBottleImage  from './WineBottleImage'
+import ScoreBadge            from './ScoreBadge'
+import WineTypeBar           from './WineTypeBar'
+import WineBottleImage       from './WineBottleImage'
+import DrinkingWindowBadge   from './DrinkingWindowBadge'
 
 const NOW = new Date().getFullYear()
 
@@ -38,7 +39,10 @@ function estimatedWindow(wineType: WineType, vintage: number | null) {
   }
 }
 
-function smartPeakLabel(b: CellarBottle): { label: string; color: string } {
+function smartPeakLabel(b: CellarBottle): {
+  label: string; color: string
+  drinkFrom: number; peak: number; drinkTo: number
+} {
   const wine = b.wine as { vintage?: number | null } | undefined
   let { drink_from, peak, drink_to } = b
 
@@ -49,14 +53,16 @@ function smartPeakLabel(b: CellarBottle): { label: string; color: string } {
 
   const peakYear = peak ?? Math.round((drink_from + drink_to) / 2)
 
-  if (NOW < drink_from) return { label: `Opens ${drink_from}`, color: '#7a4e00' }
+  const window = { drinkFrom: drink_from, peak: peakYear, drinkTo: drink_to }
+
+  if (NOW < drink_from) return { label: `Opens ${drink_from}`, color: '#7a4e00', ...window }
   if (NOW > drink_to) {
     const yrs = NOW - drink_to
-    return { label: yrs === 1 ? 'Past window' : `${yrs}y past`, color: '#a07060' }
+    return { label: yrs === 1 ? 'Past window' : `${yrs}y past`, color: '#a07060', ...window }
   }
-  if (NOW === peakYear) return { label: 'Peaking now', color: '#8b2035' }
-  if (NOW < peakYear)   return { label: `Peaks ${peakYear}`, color: '#2e7d32' }
-  return { label: `Peaked ${peakYear}`, color: '#a07060' }
+  if (NOW === peakYear) return { label: 'Peaking now', color: '#8b2035', ...window }
+  if (NOW < peakYear)   return { label: `Peaks ${peakYear}`, color: '#2e7d32', ...window }
+  return { label: `Peaked ${peakYear}`, color: '#a07060', ...window }
 }
 
 function MiniCell({ label, value }: { label: string; value: string }) {
@@ -88,7 +94,7 @@ export default function CellarBottleCard({
     label_image_url?: string | null
   } | undefined
 
-  const { label, color } = smartPeakLabel(bottle)
+  const { label, color, drinkFrom, peak: peakYear, drinkTo } = smartPeakLabel(bottle)
   const isPartnerBottle  = !!(bottle.added_by && currentUserId && bottle.added_by !== currentUserId)
   const resolvedPhoto    = photoUrl ?? wine?.label_image_url ?? null
 
@@ -148,8 +154,11 @@ export default function CellarBottleCard({
               Partner
             </span>
           )}
-          <span className="ml-auto text-xs font-medium shrink-0 whitespace-nowrap" style={{ color }}>
-            {label}
+          <span className="ml-auto shrink-0">
+            <DrinkingWindowBadge
+              label={label} color={color}
+              drinkFrom={drinkFrom} peak={peakYear} drinkTo={drinkTo}
+            />
           </span>
         </div>
       </div>
