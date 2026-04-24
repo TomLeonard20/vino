@@ -2,12 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { fetchWinePhoto } from '@/lib/wine-photo'
 
-// Service-role client — bypasses RLS for the label_image_url write
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
-
 // GET /api/wine-photo?wineId=xxx&name=yyy&producer=zzz
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
@@ -16,6 +10,12 @@ export async function GET(req: NextRequest) {
   const producer = searchParams.get('producer') ?? ''
 
   if (!wineId) return NextResponse.json({ url: null }, { status: 400 })
+
+  // Service-role client created inside handler so env vars are available at runtime
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  )
 
   // Re-check DB — another request may have already saved one
   const { data: wine } = await supabase
