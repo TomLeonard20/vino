@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { fetchWinePhoto } from '@/lib/wine-photo'
 
+export const dynamic = 'force-dynamic' // never cache — results change as images are found
+
 // GET /api/wine-photo?wineId=xxx&name=yyy&producer=zzz
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl

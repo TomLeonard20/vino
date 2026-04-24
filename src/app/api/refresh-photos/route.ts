@@ -1,48 +1,42 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { fetchWinePhoto } from '@/lib/wine-photo'
 
-// GET /api/refresh-photos
-// One-shot: re-fetches a fresh image for every wine and saves it to the DB.
-export async function GET() {
+export const dynamic = 'force-dynamic'
+
+// GET /api/refresh-photos?offset=0
+// Processes one wine at a time to stay within Vercel's 10s function limit.
+// Call repeatedly with increasing offset until done=true.
+export async function GET(req: NextRequest) {
+  const offset = parseInt(req.nextUrl.searchParams.get('offset') ?? '0', 10)
+
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   )
 
-  // Fetch all wines
+  // Fetch one wine at a time
   const { data: wines, error } = await supabase
     .from('wines')
     .select('id, name, producer')
+    .order('id')
+    .range(offset, offset)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  if (!wines?.length) return NextResponse.json({ message: 'No wines found', updated: 0 })
+  if (!wines?.length) return NextResponse.json({ done: true, offset })
 
-  // Process in batches of 5 to avoid hammering Serper
-  const BATCH = 5
-  let updated = 0
-  const failed: string[] = []
+  const wine = wines[0]
+  const url  = await fetchWinePhoto(wine.name ?? '', wine.producer ?? '')
 
-  for (let i = 0; i < wines.length; i += BATCH) {
-    const batch = wines.slice(i, i + BATCH)
-    await Promise.all(batch.map(async (wine) => {
-      try {
-        const url = await fetchWinePhoto(wine.name ?? '', wine.producer ?? '')
-        if (url) {
-          await supabase.from('wines').update({ label_image_url: url }).eq('id', wine.id)
-          updated++
-        } else {
-          failed.push(`${wine.producer ?? ''} ${wine.name ?? ''}`.trim())
-        }
-      } catch {
-        failed.push(`${wine.producer ?? ''} ${wine.name ?? ''}`.trim())
-      }
-    }))
+  if (url) {
+    await supabase.from('wines').update({ label_image_url: url }).eq('id', wine.id)
   }
 
   return NextResponse.json({
-    total:   wines.length,
-    updated,
-    noImage: failed,
+    done:     false,
+    offset,
+    next:     offset + 1,
+    wine:     `${wine.producer ?? ''} ${wine.name ?? ''}`.trim(),
+    imageUrl: url ?? null,
   })
 }
