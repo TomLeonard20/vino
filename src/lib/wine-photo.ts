@@ -66,8 +66,8 @@ async function fetchFromBrave(query: string, timeoutMs: number): Promise<string 
 }
 
 // ── 3. Vivino (keyless) ───────────────────────────────────────────────────────
-// Scrapes the first bottle photo from Vivino's server-rendered search page.
-// No key required. Vivino has images for virtually every commercially available wine.
+// Streams Vivino's search page and stops as soon as the first bottle image URL
+// is found — typically within the first 50 KB instead of downloading 700 KB+.
 async function fetchFromVivino(query: string, timeoutMs: number): Promise<string | null> {
   try {
     const q   = encodeURIComponent(query)
@@ -80,14 +80,33 @@ async function fetchFromVivino(query: string, timeoutMs: number): Promise<string
       signal: AbortSignal.timeout(timeoutMs),
     })
     console.log('[wine-photo] Vivino: status', res.status)
-    if (!res.ok) return null
-    const html = await res.text()
-    // Vivino embeds wine data server-side; bottle photos use the _pb_x960.png suffix
-    const match = html.match(/\/\/images\.vivino\.com\/thumbs\/([A-Za-z0-9_-]+_pb_x960\.png)/)
-    if (!match) { console.log('[wine-photo] Vivino: no bottle image found'); return null }
-    const url = `https:${match[0]}`
-    console.log('[wine-photo] Vivino: found', url)
-    return url
+    if (!res.ok || !res.body) return null
+
+    const PATTERN = /\/\/images\.vivino\.com\/thumbs\/[A-Za-z0-9_-]+_pb_x960\.png/
+    const reader  = res.body.getReader()
+    const decoder = new TextDecoder()
+    let   tail    = '' // keep a rolling tail to handle patterns that span chunks
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const chunk = decoder.decode(value, { stream: true })
+        const text  = tail + chunk
+        const match = text.match(PATTERN)
+        if (match) {
+          reader.cancel().catch(() => {})
+          const url = `https:${match[0]}`
+          console.log('[wine-photo] Vivino: found', url)
+          return url
+        }
+        // Retain only the last 200 chars so a pattern spanning chunks isn't missed
+        tail = text.length > 200 ? text.slice(-200) : text
+      }
+    } finally {
+      reader.releaseLock()
+    }
+    console.log('[wine-photo] Vivino: no bottle image found')
   } catch (e) { console.log('[wine-photo] Vivino: error', e) }
   return null
 }
@@ -215,7 +234,7 @@ async function fetchFromOpenFoodFacts(name: string, producer: string, timeoutMs:
 export async function fetchWinePhoto(
   name: string,
   producer: string,
-  timeoutMs = 10000,
+  timeoutMs = 7000,
 ): Promise<string | null> {
   const query = `${producer} ${name}`.trim()
   console.log('[wine-photo] fetching for:', query)
