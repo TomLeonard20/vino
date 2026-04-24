@@ -1,49 +1,31 @@
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { notFound } from 'next/navigation'
 import { Suspense } from 'react'
 import type { CellarBottle, TastingNote, FlavourProfile, WineType } from '@/types/database'
 import DrinkingWindowChart from '@/components/ui/DrinkingWindowChart'
 import WineBottleImage     from '@/components/ui/WineBottleImage'
 import Link from 'next/link'
-import { fetchWinePhoto } from '@/lib/wine-photo'
 import EditBottleSheet from './EditBottleSheet'
 
 // ── Async photo slot — streams in without blocking the page ───
 // Shows SVG immediately via Suspense fallback; replaces with real
 // photo when the Open Food Facts fetch completes.
-async function WinePhotoAsync({
-  wineId,
+// Shows stored photo from DB, or SVG fallback.
+// Image fetching happens via /api/wine-photo (called by the bottle card).
+function WinePhotoDisplay({
   name,
-  producer,
   wineType,
   storedUrl,
 }: {
-  wineId:     string
-  name:       string
-  producer:   string
-  wineType:   WineType
-  storedUrl:  string | null
+  name:      string
+  wineType:  WineType
+  storedUrl: string | null
 }) {
-  let url = storedUrl
-  if (!url) {
-    const fetched = await fetchWinePhoto(name, producer)
-    if (fetched) {
-      url = fetched
-      // Use service role key to bypass RLS on the wines table
-      const supabase = createServiceClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      )
-      await supabase.from('wines').update({ label_image_url: fetched }).eq('id', wineId)
-    }
-  }
-
-  if (url) {
+  if (storedUrl) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={url}
+        src={storedUrl}
         alt={name}
         style={{
           width: '100%',
@@ -201,19 +183,11 @@ export default async function WineDetailPage({
               boxShadow: '0 4px 20px rgba(0,0,0,0.35)',
             }}
           >
-            <Suspense fallback={
-              <div className="w-full h-full flex items-end justify-center pb-1">
-                <WineBottleImage type={b.wine_type as WineType} transparent width={68} height={128} />
-              </div>
-            }>
-              <WinePhotoAsync
-                wineId={wine.id}
-                name={wine.name ?? ''}
-                producer={wine.producer ?? ''}
-                wineType={b.wine_type as WineType}
-                storedUrl={wine.label_image_url ?? null}
-              />
-            </Suspense>
+            <WinePhotoDisplay
+              name={wine.name ?? ''}
+              wineType={b.wine_type as WineType}
+              storedUrl={wine.label_image_url ?? null}
+            />
           </div>
 
           {/* ── Right: name + key details ── */}
