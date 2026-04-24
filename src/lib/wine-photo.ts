@@ -65,7 +65,34 @@ async function fetchFromBrave(query: string, timeoutMs: number): Promise<string 
   return null
 }
 
-// ── 3. Serper.dev Google Image Search ────────────────────────────────────────
+// ── 3. Vivino (keyless) ───────────────────────────────────────────────────────
+// Scrapes the first bottle photo from Vivino's server-rendered search page.
+// No key required. Vivino has images for virtually every commercially available wine.
+async function fetchFromVivino(query: string, timeoutMs: number): Promise<string | null> {
+  try {
+    const q   = encodeURIComponent(query)
+    const res = await fetch(`https://www.vivino.com/en/search/wines?q=${q}`, {
+      headers: {
+        'User-Agent':      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+      cache:  'no-store',
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    console.log('[wine-photo] Vivino: status', res.status)
+    if (!res.ok) return null
+    const html = await res.text()
+    // Vivino embeds wine data server-side; bottle photos use the _pb_x960.png suffix
+    const match = html.match(/\/\/images\.vivino\.com\/thumbs\/([A-Za-z0-9_-]+_pb_x960\.png)/)
+    if (!match) { console.log('[wine-photo] Vivino: no bottle image found'); return null }
+    const url = `https:${match[0]}`
+    console.log('[wine-photo] Vivino: found', url)
+    return url
+  } catch (e) { console.log('[wine-photo] Vivino: error', e) }
+  return null
+}
+
+// ── 4. Serper.dev Google Image Search ────────────────────────────────────────
 // Free: 2 500 queries/month, email sign-up only (no credit card, no OAuth).
 // Sign up at https://serper.dev → Dashboard → API Key → copy to SERPER_API_KEY
 async function fetchFromSerper(query: string, timeoutMs: number): Promise<string | null> {
@@ -188,7 +215,7 @@ async function fetchFromOpenFoodFacts(name: string, producer: string, timeoutMs:
 export async function fetchWinePhoto(
   name: string,
   producer: string,
-  timeoutMs = 6000,
+  timeoutMs = 10000,
 ): Promise<string | null> {
   const query = `${producer} ${name}`.trim()
   console.log('[wine-photo] fetching for:', query)
@@ -198,6 +225,9 @@ export async function fetchWinePhoto(
 
   const brave = await fetchFromBrave(query, timeoutMs)
   if (brave) return brave
+
+  const vivino = await fetchFromVivino(query, timeoutMs)
+  if (vivino) return vivino
 
   const serper = await fetchFromSerper(query, timeoutMs)
   if (serper) return serper
