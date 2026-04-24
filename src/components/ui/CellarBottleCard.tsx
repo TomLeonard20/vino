@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useState, useEffect } from 'react'
 import type { CellarBottle, WineType } from '@/types/database'
 import ScoreBadge            from './ScoreBadge'
 import WineTypeBar           from './WineTypeBar'
@@ -23,11 +24,8 @@ function estimatedWindow(wineType: WineType, vintage: number | null) {
   switch (wineType) {
     case 'Champagne':
       if (!vintage) {
-        // NV Champagne — anchored to now, not a vintage year.
-        // Drink immediately; most NV is best within 3–5 years of release.
         return { drinkFrom: NOW, peak: NOW + 2, drinkTo: NOW + 5 }
       }
-      // Vintage Champagne — significant ageing potential.
       return { drinkFrom: vintage + 5, peak: vintage + 12, drinkTo: vintage + 25 }
     case 'White':
       return { drinkFrom: (vintage ?? NOW) + 1, peak: (vintage ?? NOW) + 3,  drinkTo: (vintage ?? NOW) + 7  }
@@ -84,6 +82,7 @@ export default function CellarBottleCard({
   photoUrl?:      string | null
 }) {
   const wine = bottle.wine as {
+    id?:              string
     name?:            string
     producer?:        string | null
     critic_score?:    number | null
@@ -95,8 +94,31 @@ export default function CellarBottleCard({
   } | undefined
 
   const { label, color, drinkFrom, peak: peakYear, drinkTo } = smartPeakLabel(bottle)
-  const isPartnerBottle  = !!(bottle.added_by && currentUserId && bottle.added_by !== currentUserId)
-  const resolvedPhoto    = photoUrl ?? wine?.label_image_url ?? null
+  const isPartnerBottle = !!(bottle.added_by && currentUserId && bottle.added_by !== currentUserId)
+
+  // Initialise from whatever the server already has in the DB
+  const storedPhoto = photoUrl ?? wine?.label_image_url ?? null
+  const [photo, setPhoto] = useState<string | null>(storedPhoto)
+
+  // If no image in DB yet, call the API route to fetch + save one
+  useEffect(() => {
+    if (photo) return                          // already have one
+    const wineId   = wine?.id
+    const name     = wine?.name     ?? ''
+    const producer = wine?.producer ?? ''
+    if (!wineId || (!name && !producer)) return
+
+    let cancelled = false
+    fetch(`/api/wine-photo?wineId=${wineId}&name=${encodeURIComponent(name)}&producer=${encodeURIComponent(producer)}`)
+      .then(r => r.json())
+      .then(({ url }: { url: string | null }) => {
+        if (!cancelled && url) setPhoto(url)
+      })
+      .catch(() => { /* silently ignore — SVG fallback stays */ })
+
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])   // run once per mount; deps intentionally omitted (values are stable)
 
   return (
     <Link
@@ -109,10 +131,10 @@ export default function CellarBottleCard({
         className="shrink-0 self-stretch flex items-end justify-center"
         style={{ width: 58, background: '#f8f4f0', paddingBottom: 4, paddingTop: 6 }}
       >
-        {resolvedPhoto ? (
+        {photo ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={resolvedPhoto}
+            src={photo}
             alt=""
             style={{
               width: 46,

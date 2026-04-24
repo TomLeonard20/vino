@@ -92,13 +92,9 @@ async function fetchFromSerper(query: string, timeoutMs: number): Promise<string
     console.log('[wine-photo] Serper: images count', (data.images ?? []).length)
     for (const item of (data.images ?? []) as Array<{
       imageUrl?: string
-      imageWidth?:  number
-      imageHeight?: number
     }>) {
       const img = item.imageUrl
       if (!img || !img.startsWith('http')) continue
-      // Prefer portrait images (taller than wide) — typical for bottle shots
-      if (item.imageWidth && item.imageHeight && item.imageWidth > item.imageHeight * 1.5) continue
       console.log('[wine-photo] Serper: found', img)
       return img
     }
