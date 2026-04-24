@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { notFound } from 'next/navigation'
 import { Suspense } from 'react'
 import type { CellarBottle, TastingNote, FlavourProfile, WineType } from '@/types/database'
@@ -29,7 +30,11 @@ async function WinePhotoAsync({
     const fetched = await fetchWinePhoto(name, producer)
     if (fetched) {
       url = fetched
-      const supabase = await createClient()
+      // Use service role key to bypass RLS on the wines table
+      const supabase = createServiceClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      )
       await supabase.from('wines').update({ label_image_url: fetched }).eq('id', wineId)
     }
   }

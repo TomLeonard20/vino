@@ -100,25 +100,24 @@ export default function CellarBottleCard({
   const storedPhoto = photoUrl ?? wine?.label_image_url ?? null
   const [photo, setPhoto] = useState<string | null>(storedPhoto)
 
-  // If no image in DB yet, call the API route to fetch + save one
-  useEffect(() => {
-    if (photo) return                          // already have one
-    const wineId   = wine?.id
-    const name     = wine?.name     ?? ''
-    const producer = wine?.producer ?? ''
+  const wineId   = wine?.id
+  const name     = wine?.name     ?? ''
+  const producer = wine?.producer ?? ''
+
+  const fetchPhoto = (force = false) => {
     if (!wineId || (!name && !producer)) return
-
-    let cancelled = false
-    fetch(`/api/wine-photo?wineId=${wineId}&name=${encodeURIComponent(name)}&producer=${encodeURIComponent(producer)}`)
+    const qs = `/api/wine-photo?wineId=${wineId}&name=${encodeURIComponent(name)}&producer=${encodeURIComponent(producer)}${force ? '&force=true' : ''}`
+    fetch(qs)
       .then(r => r.json())
-      .then(({ url }: { url: string | null }) => {
-        if (!cancelled && url) setPhoto(url)
-      })
-      .catch(() => { /* silently ignore — SVG fallback stays */ })
+      .then(({ url }: { url: string | null }) => { if (url) setPhoto(url) })
+      .catch(() => { /* SVG fallback stays */ })
+  }
 
-    return () => { cancelled = true }
+  // On mount: fetch if no image stored, or stored URL turns out broken (onError below)
+  useEffect(() => {
+    if (!photo) fetchPhoto()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])   // run once per mount; deps intentionally omitted (values are stable)
+  }, [])
 
   return (
     <Link
@@ -144,6 +143,7 @@ export default function CellarBottleCard({
               objectPosition: 'center bottom',
               display: 'block',
             }}
+            onError={() => { setPhoto(null); fetchPhoto(true) }}
           />
         ) : (
           <WineBottleImage type={bottle.wine_type} />

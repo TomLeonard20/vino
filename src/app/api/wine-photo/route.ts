@@ -11,21 +11,25 @@ export async function GET(req: NextRequest) {
 
   if (!wineId) return NextResponse.json({ url: null }, { status: 400 })
 
+  const force = searchParams.get('force') === 'true'
+
   // Service-role client created inside handler so env vars are available at runtime
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   )
 
-  // Re-check DB — another request may have already saved one
-  const { data: wine } = await supabase
-    .from('wines')
-    .select('label_image_url')
-    .eq('id', wineId)
-    .single()
+  // Re-check DB — another request may have already saved one (skip if force-refresh)
+  if (!force) {
+    const { data: wine } = await supabase
+      .from('wines')
+      .select('label_image_url')
+      .eq('id', wineId)
+      .single()
 
-  if (wine?.label_image_url) {
-    return NextResponse.json({ url: wine.label_image_url })
+    if (wine?.label_image_url) {
+      return NextResponse.json({ url: wine.label_image_url })
+    }
   }
 
   // Fetch from Serper / fallback sources
