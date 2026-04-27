@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { updateBottle, updateWine } from '../actions'
 import type { WineType } from '@/types/database'
+import { normalizeScore, describeAdjustment, SCORE_SOURCE_KEYS, type ScoreSource } from '@/lib/score-normalizer'
 
 const WINE_TYPES: WineType[] = ['Red', 'White', 'Rosé', 'Champagne']
 const NOW   = new Date().getFullYear()
@@ -69,8 +70,9 @@ export default function EditBottleSheet(props: Props) {
   const [producer, setProducer] = useState(initProducer)
   const [region,   setRegion]   = useState(initRegion)
   const [vintage,  setVintage]  = useState<number | ''>(initVintage ?? '')
-  const [grapeStr, setGrapeStr] = useState(initGrapes.join(', '))
-  const [score,    setScore]    = useState(initScore != null ? String(initScore) : '')
+  const [grapeStr,     setGrapeStr]     = useState(initGrapes.join(', '))
+  const [score,        setScore]        = useState(initScore != null ? String(initScore) : '')
+  const [scoreSource,  setScoreSource]  = useState<ScoreSource>('Wine Enthusiast')
 
   function resetToAuto() {
     setManualWindow(false)
@@ -112,13 +114,16 @@ export default function EditBottleSheet(props: Props) {
       .filter(Boolean)
 
     startTransition(async () => {
+      const rawScore = score !== '' ? parseInt(score) : null
+      const normScore = rawScore != null ? normalizeScore(rawScore, scoreSource) : null
+
       const res = await updateWine(wineId, {
         name:         name.trim(),
         producer:     producer.trim(),
         region:       region.trim(),
         vintage:      vintage || null,
         grapes:       grapeList,
-        critic_score: score !== '' ? parseInt(score) : null,
+        critic_score: normScore,
       })
       if (res.error) { setError(res.error); return }
       setOpen(false)
@@ -354,14 +359,34 @@ export default function EditBottleSheet(props: Props) {
                     <p className="text-xs mt-1" style={{ color: '#c4a090' }}>Separate multiple grapes with commas</p>
                   </div>
 
-                  {/* Critic score */}
+                  {/* Critic score + source */}
                   <div>
                     <label className={labelCls} style={labelStyle}>
                       Critic score <span style={{ color: '#c4a090', fontWeight: 400, textTransform: 'none' }}>(optional)</span>
                     </label>
-                    <input type="number" min="50" max="100" placeholder="e.g. 93"
-                      value={score} onChange={e => setScore(e.target.value)}
-                      className={inputCls} style={inputStyle} />
+                    <div className="flex gap-2">
+                      <input type="number" min="50" max="100" placeholder="e.g. 97"
+                        value={score} onChange={e => setScore(e.target.value)}
+                        className={`${inputCls} w-24 shrink-0`} style={inputStyle} />
+                      <select
+                        value={scoreSource}
+                        onChange={e => setScoreSource(e.target.value as ScoreSource)}
+                        className={`${inputCls} flex-1`} style={inputStyle}
+                      >
+                        {SCORE_SOURCE_KEYS.map(k => (
+                          <option key={k} value={k}>{k}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {/* Live normalisation preview */}
+                    {score !== '' && !isNaN(parseInt(score)) && (
+                      <p className="text-xs mt-1.5" style={{ color: '#8b2035' }}>
+                        Saved as: {describeAdjustment(parseInt(score), scoreSource)}
+                      </p>
+                    )}
+                    <p className="text-xs mt-1" style={{ color: '#c4a090' }}>
+                      Scores are normalised to a common scale so critics can be compared fairly.
+                    </p>
                   </div>
 
                   {error && <p className="text-sm" style={{ color: '#8b2035' }}>{error}</p>}
