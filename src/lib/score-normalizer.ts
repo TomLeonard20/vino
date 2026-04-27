@@ -30,6 +30,10 @@ export const SCORE_SOURCES = {
   'Wine Spectator':  { mean: 87.50, std: 3.00, label: 'Wine Spectator' },
   'Decanter':        { mean: 88.00, std: 3.50, label: 'Decanter' },
   'Jancis Robinson': { mean: 88.00, std: 3.00, label: 'Jancis Robinson' },
+  // Vivino community: 0–5 scale, effective range 3.0–4.8
+  // Mean ~3.75, std ~0.28 (from published Vivino rating distribution studies)
+  // Treated as a separate source so normalisation maps e.g. 4.3 → 93
+  'Vivino':          { mean: 3.75,  std: 0.28, label: 'Vivino community' },
   'Other':           { mean: 88.45, std: 3.00, label: 'Other (no adjustment)' },
 } as const
 
