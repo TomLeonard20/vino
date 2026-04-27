@@ -58,6 +58,8 @@ export default function AddWinePage() {
   const [searching,   setSearching]   = useState(false)
   const [showDrop,    setShowDrop]    = useState(false)
   const [fromCat,     setFromCat]     = useState(false)
+  const [catPoints,   setCatPoints]   = useState<number | null>(null)
+  const [catPriceAud, setCatPriceAud] = useState<number | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Drinking window
@@ -99,6 +101,8 @@ export default function AddWinePage() {
     setQuery(cleanName)
     setShowDrop(false)
     setFromCat(true)
+    setCatPoints(w.points ?? null)
+    setCatPriceAud(w.price_aud ?? null)
     setDrinkWindow(null)
   }
 
@@ -142,12 +146,13 @@ export default function AddWinePage() {
       .insert({
         user_id:   user.id,
         cellar_id: cellarId,
-        name:      cleanWineName(name.trim()),
-        producer:  producer.trim(),
-        region:    region.trim(),
-        vintage:   vintage || null,
-        grapes:    grapes ? [grapes] : [],
-        db_source: fromCat ? 'Wine catalogue' : 'Manual entry',
+        name:         cleanWineName(name.trim()),
+        producer:     producer.trim(),
+        region:       region.trim(),
+        vintage:      vintage || null,
+        grapes:       grapes ? [grapes] : [],
+        critic_score: catPoints,
+        db_source:    fromCat ? 'Wine catalogue' : 'Manual entry',
       })
       .select()
       .single()
@@ -171,6 +176,8 @@ export default function AddWinePage() {
       purchase_price:    purchasePrice ? parseFloat(purchasePrice) : null,
       purchase_currency: 'AUD',
       purchase_date:     purchaseDate || null,
+      market_price:      catPriceAud,
+      market_currency:   'AUD',
     })
 
     if (bottleErr) {

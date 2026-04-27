@@ -127,10 +127,20 @@ export default async function WineDetailPage({
   const fpData   = fp ?? { id: '', wine_id: '', ...DEFAULT_FP[b.wine_type] ?? DEFAULT_FP['Red'] }
   const fpIsReal = !!fp
 
+  // ── Score: critic score, or best personal tasting note ────────
+  const bestNoteScore = myNotes.length > 0
+    ? Math.max(...myNotes.map(n => n.score))
+    : null
+  const displayScore     = wine.critic_score ?? null
+  const displayScoreNote = !wine.critic_score && bestNoteScore
+    ? bestNoteScore : null
+
   // ── Value change ──────────────────────────────────────────────
+  // market_price = catalogue/scan price; fall back to purchase price for display
+  const refPrice      = b.market_price ?? b.purchase_price
   const purchaseTotal = (b.purchase_price ?? 0) * b.quantity
   const marketTotal   = (b.market_price   ?? 0) * b.quantity
-  const valueChange   = purchaseTotal && marketTotal ? marketTotal - purchaseTotal : null
+  const valueChange   = purchaseTotal && b.market_price ? marketTotal - purchaseTotal : null
   const valuePct      = purchaseTotal && valueChange != null
     ? Math.round((valueChange / purchaseTotal) * 100) : null
 
@@ -236,10 +246,10 @@ export default async function WineDetailPage({
         {/* ── Stat strip: score · paid · est. value · gain ── */}
         <div className="mt-4 grid grid-cols-4 gap-2">
           <StatChip
-            label="Score"
-            value={wine.critic_score ? `${wine.critic_score}` : '—'}
-            unit={wine.critic_score ? 'pts' : undefined}
-            highlight={!!wine.critic_score}
+            label={displayScore ? 'Critic' : displayScoreNote ? 'My score' : 'Score'}
+            value={displayScore ? `${displayScore}` : displayScoreNote ? `${displayScoreNote}` : '—'}
+            unit={(displayScore || displayScoreNote) ? 'pts' : undefined}
+            highlight={!!displayScore}
           />
           <StatChip
             label="Paid"
@@ -247,8 +257,9 @@ export default async function WineDetailPage({
             sub={b.purchase_price != null ? purchaseDate : undefined}
           />
           <StatChip
-            label="Est. value"
-            value={b.market_price != null ? `A$${b.market_price}` : '—'}
+            label={b.market_price != null ? 'Est. value' : b.purchase_price != null ? 'Paid ea.' : 'Value'}
+            value={refPrice != null ? `A$${refPrice}` : '—'}
+            sub={b.market_price == null && b.purchase_price != null ? 'no mkt data' : undefined}
           />
           <StatChip
             label="Gain"
@@ -265,7 +276,7 @@ export default async function WineDetailPage({
             sub={
               valueChange !== null
                 ? `${valueChange >= 0 ? '+' : '−'}A$${Math.abs(Math.round(valueChange))}`
-                : undefined
+                : b.market_price == null ? 'no mkt data' : undefined
             }
           />
         </div>
