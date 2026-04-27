@@ -165,7 +165,9 @@ export default async function WineDetailPage({
         </Link>
         <EditBottleSheet
           bottleId={b.id}
+          wineId={wine.id}
           quantity={b.quantity}
+          wineType={b.wine_type}
           purchasePrice={b.purchase_price}
           purchaseDate={b.purchase_date}
           drinkFrom={b.drink_from}
@@ -174,6 +176,12 @@ export default async function WineDetailPage({
           estimatedFrom={drinkWindow.drinkFrom}
           estimatedPeak={drinkWindow.peak}
           estimatedTo={drinkWindow.drinkTo}
+          wineName={wine.name ?? ''}
+          producer={wine.producer ?? ''}
+          region={wine.region ?? ''}
+          vintage={wine.vintage ?? null}
+          grapes={wine.grapes ?? []}
+          criticScore={wine.critic_score ?? null}
         />
       </div>
 
