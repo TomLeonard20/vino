@@ -257,7 +257,7 @@ export default async function WineDetailPage({
             label={displayScore ? 'Critic' : displayScoreNote ? 'My score' : 'Score'}
             value={displayScore ? `${displayScore}` : displayScoreNote ? `${displayScoreNote}` : '—'}
             unit={(displayScore || displayScoreNote) ? 'pts' : undefined}
-            highlight={false}
+            valueColor="white"
           />
           <StatChip
             label="Paid"
