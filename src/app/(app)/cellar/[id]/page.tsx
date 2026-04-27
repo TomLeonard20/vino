@@ -265,7 +265,7 @@ export default async function WineDetailPage({
             sub={b.purchase_price != null ? purchaseDate : undefined}
           />
           <StatChip
-            label={b.market_price != null ? 'Est. value' : b.purchase_price != null ? 'Paid ea.' : 'Value'}
+            label={b.market_price != null ? 'Est. value' : 'Market value'}
             value={refPrice != null ? `A$${refPrice}` : '—'}
             sub={b.market_price == null && b.purchase_price != null ? 'no mkt data' : undefined}
           />
