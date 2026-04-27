@@ -6,9 +6,9 @@ interface Props {
 }
 
 const styles = {
-  gold:   { background: '#f5e6b0', color: '#7a5c00' },
-  silver: { background: '#e8e4e0', color: '#4a4440' },
-  bronze: { background: '#f0ddd0', color: '#6a3a20' },
+  gold:   { background: '#8b2035', color: 'white' },
+  silver: { background: '#8b2035', color: 'white' },
+  bronze: { background: '#8b2035', color: 'white' },
   none:   { background: '#ecddd4', color: '#a07060' },
 }
 
