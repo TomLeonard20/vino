@@ -6,6 +6,7 @@ import DrinkingWindowChart from '@/components/ui/DrinkingWindowChart'
 import WineBottleImage     from '@/components/ui/WineBottleImage'
 import Link from 'next/link'
 import EditBottleSheet from './EditBottleSheet'
+import QuantityControls from './QuantityControls'
 
 // ── Async photo slot — streams in without blocking the page ───
 // Shows SVG immediately via Suspense fallback; replaces with real
@@ -359,20 +360,7 @@ export default async function WineDetailPage({
               </p>
             )}
           </div>
-          <div className="flex gap-2 shrink-0">
-            <button
-              className="px-3 py-2 rounded-xl text-sm font-semibold border-2 active:opacity-60"
-              style={{ borderColor: '#3a1a20', color: '#3a1a20' }}
-            >
-              Drink ↗
-            </button>
-            <button
-              className="px-3 py-2 rounded-xl text-sm font-semibold border-2 active:opacity-60"
-              style={{ borderColor: '#3a1a20', color: '#3a1a20' }}
-            >
-              + Add
-            </button>
-          </div>
+          <QuantityControls bottleId={b.id} quantity={b.quantity} />
         </div>
 
         {/* MY TASTING NOTES */}
