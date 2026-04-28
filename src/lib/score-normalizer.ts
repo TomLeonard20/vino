@@ -34,6 +34,8 @@ export const SCORE_SOURCES = {
   // Mean ~3.75, std ~0.28 (from published Vivino rating distribution studies)
   // Treated as a separate source so normalisation maps e.g. 4.3 → 93
   'Vivino':          { mean: 3.75,  std: 0.28, label: 'Vivino community' },
+  // Wine-Searcher aggregated critic score: already on WE-equivalent 100-pt scale
+  'Wine-Searcher':   { mean: 88.45, std: 3.00, label: 'Wine-Searcher' },
   'Other':           { mean: 88.45, std: 3.00, label: 'Other (no adjustment)' },
 } as const
 

@@ -198,6 +198,55 @@ export async function fetchFromVivino(
   }
 }
 
+// ── 3. Wine-Searcher aggregated critic score ──────────────────────────────────
+// Scrapes the dataLayer.push() JSON that Wine-Searcher embeds on every wine
+// product page. The `criticScore` field is the aggregated critic consensus
+// already on a standard 100-point scale — no normalisation required.
+export async function fetchFromWineSearcher(
+  name: string,
+  producer: string,
+  vintage: number | null,
+  timeoutMs = 9000,
+): Promise<{ score: number; source: string; rawScore: number } | null> {
+  try {
+    const vintageStr = vintage ? ` ${vintage}` : ''
+    const query      = `${producer} ${name}${vintageStr}`.trim()
+    const res        = await fetch(`https://www.wine-searcher.com/find/${encodeURIComponent(query)}`, {
+      headers: {
+        'User-Agent':      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-AU,en;q=0.9',
+      },
+      cache:  'no-store',
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    if (!res.ok) return null
+
+    const text = await res.text()
+
+    // Wine-Searcher embeds product data in a Google Analytics dataLayer push:
+    // dataLayer.push({..., "product":{"name":"...","criticScore":89,...},...})
+    const productMatch = text.match(/"product":\{([^}]+)\}/)
+    if (!productMatch) return null
+
+    const productJson = `{${productMatch[1]}}`
+    let product: Record<string, unknown>
+    try { product = JSON.parse(productJson) } catch { return null }
+
+    const criticScore = typeof product.criticScore === 'number' ? product.criticScore : null
+    if (!criticScore || criticScore <= 0) return null
+
+    // Verify the returned wine name matches our query
+    const returnedName = typeof product.name === 'string' ? product.name : ''
+    const matchScore   = wordOverlap(name, returnedName) * 0.6 +
+                         wordOverlap(producer, returnedName) * 0.4
+    if (matchScore < 0.2) return null
+
+    return { score: criticScore, source: 'Wine-Searcher', rawScore: criticScore }
+  } catch {
+    return null
+  }
+}
+
 // ── Public entry point ────────────────────────────────────────────────────────
 export async function fetchWineScore(
   supabase: ReturnType<typeof import('@supabase/supabase-js').createClient>,
@@ -210,5 +259,8 @@ export async function fetchWineScore(
   if (catalogue) return catalogue
 
   const vivino = await fetchFromVivino(name, producer, timeoutMs)
-  return vivino
+  if (vivino) return vivino
+
+  const wineSearcher = await fetchFromWineSearcher(name, producer, vintage, timeoutMs)
+  return wineSearcher
 }
