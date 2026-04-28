@@ -39,6 +39,13 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
+/* ── Prevent iOS auto-zoom on input focus ────────────────── */
+/* iOS Safari zooms in whenever an input's font-size is < 16px.
+   Setting a 16px minimum here stops that without disabling user zoom. */
+input, select, textarea {
+  font-size: 16px;
+}
+
 /* ── Tap press feedback (iOS) ────────────────────────────── */
 /* Restore native iOS tap highlight so buttons feel responsive */
 a, button {
