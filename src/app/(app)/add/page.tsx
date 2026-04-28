@@ -53,13 +53,14 @@ export default function AddWinePage() {
   const [quantity,      setQuantity]      = useState('1')
 
   // Typeahead
-  const [query,       setQuery]       = useState('')
-  const [suggestions, setSuggestions] = useState<CatalogueWine[]>([])
-  const [searching,   setSearching]   = useState(false)
-  const [showDrop,    setShowDrop]    = useState(false)
-  const [fromCat,     setFromCat]     = useState(false)
-  const [catPoints,   setCatPoints]   = useState<number | null>(null)
-  const [catPriceAud, setCatPriceAud] = useState<number | null>(null)
+  const [query,          setQuery]          = useState('')
+  const [suggestions,    setSuggestions]    = useState<CatalogueWine[]>([])
+  const [vivinoSugs,     setVivinoSugs]     = useState<(CatalogueWine & { source?: string })[]>([])
+  const [searching,      setSearching]      = useState(false)
+  const [showDrop,       setShowDrop]       = useState(false)
+  const [fromCat,        setFromCat]        = useState(false)
+  const [catPoints,      setCatPoints]      = useState<number | null>(null)
+  const [catPriceAud,    setCatPriceAud]    = useState<number | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Drinking window
@@ -73,29 +74,65 @@ export default function AddWinePage() {
   // ── Typeahead search ───────────────────────────────────────────
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    if (query.length < 2) { setSuggestions([]); setShowDrop(false); return }
+    if (query.length < 2) {
+      setSuggestions([])
+      setVivinoSugs([])
+      setShowDrop(false)
+      setSearching(false)
+      return
+    }
+
+    // Show spinner immediately — before the debounce fires
+    setSearching(true)
 
     debounceRef.current = setTimeout(async () => {
-      setSearching(true)
-      const res  = await fetch(`/api/wine-search?q=${encodeURIComponent(query)}&limit=6`)
-      const data = await res.json()
-      setSuggestions(data.results ?? [])
+      const q = encodeURIComponent(query)
+      const [catRes, vivinoRes] = await Promise.allSettled([
+        fetch(`/api/wine-search?q=${q}&limit=6`).then(r => r.json()),
+        fetch(`/api/vivino-suggest?q=${q}`).then(r => r.json()),
+      ])
+
+      const catResults    = catRes.status    === 'fulfilled' ? (catRes.value.results    ?? []) : []
+      const vivinoResults = vivinoRes.status === 'fulfilled' ? (vivinoRes.value.results ?? []) : []
+
+      // Dedup Vivino results against catalogue: remove if name already well-covered
+      const catTitles = catResults.map((w: CatalogueWine) => w.title.toLowerCase())
+      const deduped   = vivinoResults.filter((v: CatalogueWine & { source?: string }) => {
+        const vWords = v.title.toLowerCase().split(/\s+/)
+        return !catTitles.some((t: string) =>
+          vWords.filter(w => t.includes(w) && w.length > 3).length >= 2
+        )
+      })
+
+      setSuggestions(catResults)
+      setVivinoSugs(deduped)
       setShowDrop(true)
       setSearching(false)
-    }, 250)
+    }, 300)
 
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [query])
 
-  function pickSuggestion(w: CatalogueWine) {
-    const grapeList = w.variety ? [w.variety] : []
+  function pickSuggestion(w: CatalogueWine & { source?: string }) {
+    // For Vivino results the title may contain the grape ("Gibson The Dirtman Shiraz")
+    // Try to infer grape/variety from common keywords in the title
+    const KNOWN_GRAPES = ['Shiraz','Cabernet Sauvignon','Pinot Noir','Chardonnay',
+      'Sauvignon Blanc','Riesling','Merlot','Grenache','Nebbiolo','Sangiovese',
+      'Tempranillo','Zinfandel','Pinot Gris','Pinot Grigio','Viognier','Malbec',
+      'Cabernet Franc','Syrah','Gewürztraminer','Moscato','Prosecco']
+    const titleLower = w.title.toLowerCase()
+    const inferredGrape = w.variety
+      || KNOWN_GRAPES.find(g => titleLower.includes(g.toLowerCase()))
+      || ''
+
+    const grapeList = inferredGrape ? [inferredGrape] : []
     const detected  = detectWineType(grapeList, w.title, w.region ?? '')
 
     const cleanName = cleanWineName(w.title)
     setName(cleanName)
     setProducer(w.winery ?? '')
     setRegion(w.region ?? w.province ?? '')
-    setGrapes(w.variety ?? '')
+    setGrapes(inferredGrape)
     setVintage(w.vintage ?? '')
     setWineType(detected)
     setQuery(cleanName)
@@ -221,14 +258,16 @@ export default function AddWinePage() {
                    style={{ borderColor: '#d4b8aa', borderTopColor: '#8b2035' }} />
             </div>
           )}
-          {showDrop && (suggestions.length > 0 || (!searching && query.length >= 2)) && (
+          {showDrop && (suggestions.length > 0 || vivinoSugs.length > 0 || (!searching && query.length >= 2)) && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setShowDrop(false)} />
               <div className="absolute left-0 right-0 top-full mt-1 z-20 rounded-xl overflow-hidden shadow-lg"
                    style={{ background: '#f5ede6', border: '1px solid #d4b8aa' }}>
+
+                {/* ── Catalogue results ── */}
                 {suggestions.map(w => (
                   <button
-                    key={w.id}
+                    key={`cat-${w.id}`}
                     onMouseDown={() => pickSuggestion(w)}
                     className="w-full text-left px-4 py-3 border-b flex items-start gap-3"
                     style={{ borderColor: '#e8d8cc' }}
@@ -250,7 +289,45 @@ export default function AddWinePage() {
                     )}
                   </button>
                 ))}
-                {/* Always offer the typed text as a manual entry option */}
+
+                {/* ── Vivino results ── */}
+                {vivinoSugs.length > 0 && (
+                  <>
+                    {suggestions.length > 0 && (
+                      <div className="px-4 py-1.5 flex items-center gap-2"
+                           style={{ background: '#ecddd4' }}>
+                        <span className="text-xs font-semibold tracking-wide" style={{ color: '#a07060' }}>
+                          Also on Vivino
+                        </span>
+                      </div>
+                    )}
+                    {vivinoSugs.map(w => (
+                      <button
+                        key={`viv-${w.id}`}
+                        onMouseDown={() => pickSuggestion(w)}
+                        className="w-full text-left px-4 py-3 border-b flex items-start gap-3"
+                        style={{ borderColor: '#e8d8cc' }}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-sm truncate" style={{ color: '#3a1a20' }}>
+                            {w.title}
+                          </p>
+                          <p className="text-xs truncate mt-0.5" style={{ color: '#a07060' }}>
+                            {w.vintage ? `${w.vintage} · ` : ''}Community rating
+                          </p>
+                        </div>
+                        {w.points && (
+                          <span className="text-xs font-bold shrink-0 px-1.5 py-0.5 rounded"
+                                style={{ background: '#8b2035', color: 'white' }}>
+                            {w.points}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </>
+                )}
+
+                {/* ── Manual entry fallback ── */}
                 <button
                   onMouseDown={() => {
                     setName(query.trim())
@@ -265,7 +342,7 @@ export default function AddWinePage() {
                   <p className="text-sm font-medium truncate" style={{ color: '#3a1a20' }}>
                     "{query.trim()}"
                   </p>
-                  {suggestions.length === 0 && (
+                  {suggestions.length === 0 && vivinoSugs.length === 0 && (
                     <p className="text-xs shrink-0" style={{ color: '#a07060' }}>not in catalogue</p>
                   )}
                 </button>
