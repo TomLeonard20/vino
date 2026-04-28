@@ -104,11 +104,29 @@ export async function GET(req: NextRequest) {
     data = (filtered ?? []) as CatalogueWine[]
   }
 
-  // ── Attach AUD price ──────────────────────────────────────────
-  const results = (data ?? []).map(w => ({
-    ...w,
-    price_aud: w.price_usd ? Math.round(w.price_usd * USD_TO_AUD) : null,
-  }))
+  // ── Re-rank by producer relevance before returning ───────────
+  // Sorting purely by points lets wines from OTHER producers that mention
+  // the query word in their title (e.g. "Marietta Cellars Gibson Block")
+  // outrank actual producer matches (e.g. "Gibson's BarossaVale").
+  // We score each result: winery match to query words is worth 2×,
+  // title match worth 1×, then break ties with points.
+  const qWords = q
+    ? stripAccents(q).toLowerCase().split(/\s+/).filter(w => w.length > 2)
+    : []
+
+  function relevanceScore(w: { title: string; winery: string; points: number | null }): number {
+    if (!qWords.length) return w.points ?? 0
+    const wn = stripAccents(w.winery ?? '').toLowerCase()
+    const tn = stripAccents(w.title  ?? '').toLowerCase()
+    const wineryHits = qWords.filter(qw => wn.includes(qw)).length
+    const titleHits  = qWords.filter(qw => tn.includes(qw)).length
+    // Scale: winery match = 200 per word, title-only = 100 per word, + raw points
+    return wineryHits * 200 + titleHits * 100 + (w.points ?? 0)
+  }
+
+  const results = (data ?? [])
+    .map(w => ({ ...w, price_aud: w.price_usd ? Math.round(w.price_usd * USD_TO_AUD) : null }))
+    .sort((a, b) => relevanceScore(b) - relevanceScore(a))
 
   return NextResponse.json({ results, count: results.length })
 }
