@@ -8,7 +8,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!user) redirect('/login')
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: '#f5ede6' }}>
+    <div className="min-h-svh flex flex-col" style={{ background: '#f5ede6' }}>
       <Nav user={user} />
       <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-6">
         {children}

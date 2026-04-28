@@ -17,6 +17,10 @@
 
 html {
   background-color: var(--parchment);
+  height: 100%;
+  /* Prevent iOS from auto-scaling text — a common cause of "needs zoom to fit" */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -24,6 +28,9 @@ body {
   color: var(--text-primary);
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  height: 100%;
+  /* Prevent horizontal overflow causing Safari to shrink the layout */
+  overflow-x: hidden;
 }
 
 /* Scrollbar styling */

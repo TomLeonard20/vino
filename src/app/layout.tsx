@@ -16,6 +16,7 @@ export const viewport: Viewport = {
   themeColor:   '#8b2035',
   width:        'device-width',
   initialScale: 1,
+  viewportFit:  'cover',   // respect notch / safe areas on iOS
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
