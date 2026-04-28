@@ -26,14 +26,17 @@ function stripAccents(s: string): string {
 }
 
 export async function GET(req: NextRequest) {
-  const q       = req.nextUrl.searchParams.get('q')?.trim()
-  const variety = req.nextUrl.searchParams.get('variety')?.trim()
-  const country = req.nextUrl.searchParams.get('country')?.trim()
+  const q        = req.nextUrl.searchParams.get('q')?.trim()
+  const variety  = req.nextUrl.searchParams.get('variety')?.trim()
+  const country  = req.nextUrl.searchParams.get('country')?.trim()
+  const producer = req.nextUrl.searchParams.get('producer')?.trim()
+  const vintageP = req.nextUrl.searchParams.get('vintage')?.trim()
+  const vintage  = vintageP ? parseInt(vintageP) : null
   const limitParam = parseInt(req.nextUrl.searchParams.get('limit') ?? '10')
   const limit   = Math.min(limitParam, 50)
 
-  if (!q && !variety && !country) {
-    return NextResponse.json({ error: 'Provide q, variety, or country' }, { status: 400 })
+  if (!q && !variety && !country && !producer && !vintage) {
+    return NextResponse.json({ error: 'Provide q, variety, country, producer, or vintage' }, { status: 400 })
   }
 
   const supabase = await createClient()
@@ -91,15 +94,17 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // ── Filter by variety / country if provided ──────────────────
+  // ── Filter by producer / variety / vintage / country ─────────
   if (!data) {
     let query = supabase
       .from('wine_catalogue')
       .select('id,title,winery,variety,country,province,region,vintage,points,price_usd,description')
       .order('points', { ascending: false, nullsFirst: false })
       .limit(limit)
-    if (variety) query = query.ilike('variety', `%${variety}%`)
-    if (country) query = query.ilike('country', `%${country}%`)
+    if (producer) query = query.ilike('winery',   `%${stripAccents(producer)}%`)
+    if (variety)  query = query.ilike('variety',  `%${variety}%`)
+    if (country)  query = query.ilike('country',  `%${country}%`)
+    if (vintage)  query = query.eq('vintage', vintage)
     const { data: filtered } = await query
     data = (filtered ?? []) as CatalogueWine[]
   }

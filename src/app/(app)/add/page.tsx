@@ -53,7 +53,10 @@ export default function AddWinePage() {
   const [purchaseDate,  setPurchaseDate]  = useState('')
   const [quantity,      setQuantity]      = useState('1')
 
-  // Typeahead
+  // Mode toggle
+  const [mode, setMode] = useState<'search' | 'filter'>('search')
+
+  // Search mode (free-text typeahead)
   const [query,          setQuery]          = useState('')
   const [suggestions,    setSuggestions]    = useState<CatalogueWine[]>([])
   const [vivinoSugs,     setVivinoSugs]     = useState<VivinoSuggestion[]>([])
@@ -64,6 +67,15 @@ export default function AddWinePage() {
   const [catPoints,      setCatPoints]      = useState<number | null>(null)
   const [catPriceAud,    setCatPriceAud]    = useState<number | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Filter mode (producer + variety + vintage)
+  const [fProducer,      setFProducer]      = useState('')
+  const [fVariety,       setFVariety]       = useState('')
+  const [fVintage,       setFVintage]       = useState<number | ''>('')
+  const [filterResults,  setFilterResults]  = useState<CatalogueWine[]>([])
+  const [filterVivino,   setFilterVivino]   = useState<VivinoSuggestion[]>([])
+  const [filterSearching,setFilterSearching]= useState(false)
+  const filterDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Drinking window
   const [drinkWindow, setDrinkWindow] = useState<DrinkingWindowResult | null>(null)
@@ -114,6 +126,47 @@ export default function AddWinePage() {
 
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [query])
+
+  // ── Filter mode search ─────────────────────────────────────────
+  useEffect(() => {
+    if (filterDebounce.current) clearTimeout(filterDebounce.current)
+    const hasInput = fProducer.length >= 2 || fVariety.length >= 2 || (fVintage !== '')
+    if (!hasInput) { setFilterResults([]); setFilterVivino([]); return }
+
+    setFilterSearching(true)
+    filterDebounce.current = setTimeout(async () => {
+      const params = new URLSearchParams({ limit: '8' })
+      if (fProducer) params.set('producer', fProducer)
+      if (fVariety)  params.set('variety',  fVariety)
+      if (fVintage)  params.set('vintage',  String(fVintage))
+
+      // Build a Vivino query from the filter fields
+      const vivinoQ = [fProducer, fVariety, fVintage].filter(Boolean).join(' ')
+
+      const [catRes, vivRes] = await Promise.allSettled([
+        fetch(`/api/wine-search?${params}`).then(r => r.json()),
+        vivinoQ.length >= 3
+          ? fetch(`/api/vivino-suggest?q=${encodeURIComponent(vivinoQ)}`).then(r => r.json())
+          : Promise.resolve({ results: [] }),
+      ])
+
+      const catResults:    CatalogueWine[]    = catRes.status === 'fulfilled' ? (catRes.value.results ?? []) : []
+      const vivinoResults: VivinoSuggestion[] = vivRes.status === 'fulfilled' ? (vivRes.value.results ?? []) : []
+
+      // Dedup Vivino against catalogue
+      const catTitles = catResults.map(w => w.title.toLowerCase())
+      const deduped   = vivinoResults.filter(v => {
+        const vWords = v.title.toLowerCase().split(/\s+/).filter(w => w.length > 3)
+        return !catTitles.some(t => vWords.filter(w => t.includes(w)).length >= 2)
+      })
+
+      setFilterResults(catResults)
+      setFilterVivino(deduped)
+      setFilterSearching(false)
+    }, 400)
+
+    return () => { if (filterDebounce.current) clearTimeout(filterDebounce.current) }
+  }, [fProducer, fVariety, fVintage])
 
   const KNOWN_GRAPES = ['Shiraz','Cabernet Sauvignon','Pinot Noir','Chardonnay',
     'Sauvignon Blanc','Riesling','Merlot','Grenache','Nebbiolo','Sangiovese',
@@ -263,7 +316,25 @@ export default function AddWinePage() {
     <div className="space-y-5 pb-8">
       <h1 className="font-semibold text-lg" style={{ color: '#3a1a20' }}>Add a wine</h1>
 
-      {/* ── Wine name with typeahead ── */}
+      {/* ── Mode toggle ── */}
+      <div className="flex rounded-xl overflow-hidden border" style={{ borderColor: '#d4b8aa' }}>
+        {(['search', 'filter'] as const).map(m => (
+          <button
+            key={m}
+            onClick={() => setMode(m)}
+            className="flex-1 py-2.5 text-sm font-semibold transition-colors"
+            style={{
+              background: mode === m ? '#8b2035' : '#ecddd4',
+              color:      mode === m ? 'white'   : '#a07060',
+            }}
+          >
+            {m === 'search' ? '🔍  Search by name' : '🎛  Filter by details'}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Search mode ── */}
+      {mode === 'search' && (
       <div>
         <p className="mb-1.5" style={labelStyle}>Wine name</p>
         <div className="relative">
@@ -292,86 +363,48 @@ export default function AddWinePage() {
               <div className="absolute left-0 right-0 top-full mt-1 z-20 rounded-xl overflow-hidden shadow-lg"
                    style={{ background: '#f5ede6', border: '1px solid #d4b8aa' }}>
 
-                {/* ── Catalogue results ── */}
                 {suggestions.map(w => (
-                  <button
-                    key={`cat-${w.id}`}
-                    onMouseDown={() => pickSuggestion(w)}
+                  <button key={`cat-${w.id}`} onMouseDown={() => pickSuggestion(w)}
                     className="w-full text-left px-4 py-3 border-b flex items-start gap-3"
-                    style={{ borderColor: '#e8d8cc' }}
-                  >
+                    style={{ borderColor: '#e8d8cc' }}>
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm truncate" style={{ color: '#3a1a20' }}>
-                        {w.title}
-                      </p>
+                      <p className="font-semibold text-sm truncate" style={{ color: '#3a1a20' }}>{w.title}</p>
                       <p className="text-xs truncate mt-0.5" style={{ color: '#a07060' }}>
                         {[w.winery, w.region, w.vintage].filter(Boolean).join(' · ')}
                         {w.price_aud ? ` · A$${w.price_aud}` : ''}
                       </p>
                     </div>
-                    {w.points && (
-                      <span className="text-xs font-bold shrink-0 px-1.5 py-0.5 rounded"
-                            style={{ background: '#8b2035', color: 'white' }}>
-                        {w.points}
-                      </span>
-                    )}
+                    {w.points && <span className="text-xs font-bold shrink-0 px-1.5 py-0.5 rounded" style={{ background: '#8b2035', color: 'white' }}>{w.points}</span>}
                   </button>
                 ))}
 
-                {/* ── Vivino results (one per wine, no vintage) ── */}
                 {vivinoSugs.length > 0 && (
                   <>
                     {suggestions.length > 0 && (
-                      <div className="px-4 py-1.5"
-                           style={{ background: '#ecddd4' }}>
-                        <span className="text-xs font-semibold tracking-wide" style={{ color: '#a07060' }}>
-                          Also on Vivino
-                        </span>
+                      <div className="px-4 py-1.5" style={{ background: '#ecddd4' }}>
+                        <span className="text-xs font-semibold tracking-wide" style={{ color: '#a07060' }}>Also on Vivino</span>
                       </div>
                     )}
                     {vivinoSugs.map(v => (
-                      <button
-                        key={`viv-${v.id}`}
-                        onMouseDown={() => pickVivinoWine(v)}
+                      <button key={`viv-${v.id}`} onMouseDown={() => pickVivinoWine(v)}
                         className="w-full text-left px-4 py-3 border-b flex items-start gap-3"
-                        style={{ borderColor: '#e8d8cc' }}
-                      >
+                        style={{ borderColor: '#e8d8cc' }}>
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-sm truncate" style={{ color: '#3a1a20' }}>
-                            {v.title}
-                          </p>
+                          <p className="font-semibold text-sm truncate" style={{ color: '#3a1a20' }}>{v.title}</p>
                           <p className="text-xs mt-0.5" style={{ color: '#a07060' }}>
-                            {v.vintages.length > 0
-                              ? `${v.vintages.slice(0, 3).join(', ')}${v.vintages.length > 3 ? '…' : ''}`
-                              : 'Vivino community'}
+                            {v.vintages.slice(0, 3).join(', ')}{v.vintages.length > 3 ? '…' : ''}
                           </p>
                         </div>
-                        {v.points && (
-                          <span className="text-xs font-bold shrink-0 px-1.5 py-0.5 rounded"
-                                style={{ background: '#8b2035', color: 'white' }}>
-                            {v.points}
-                          </span>
-                        )}
+                        {v.points && <span className="text-xs font-bold shrink-0 px-1.5 py-0.5 rounded" style={{ background: '#8b2035', color: 'white' }}>{v.points}</span>}
                       </button>
                     ))}
                   </>
                 )}
 
-                {/* ── Manual entry fallback ── */}
-                <button
-                  onMouseDown={() => {
-                    setName(query.trim())
-                    setQuery(query.trim())
-                    setShowDrop(false)
-                    setFromCat(false)
-                  }}
-                  className="w-full text-left px-4 py-3 flex items-center gap-2"
-                >
-                  <span className="text-xs px-1.5 py-0.5 rounded font-medium shrink-0"
-                        style={{ background: '#ecddd4', color: '#8b2035' }}>+ Use</span>
-                  <p className="text-sm font-medium truncate" style={{ color: '#3a1a20' }}>
-                    "{query.trim()}"
-                  </p>
+                <button onMouseDown={() => { setName(query.trim()); setQuery(query.trim()); setShowDrop(false); setFromCat(false) }}
+                  className="w-full text-left px-4 py-3 flex items-center gap-2">
+                  <span className="text-xs px-1.5 py-0.5 rounded font-medium shrink-0" style={{ background: '#ecddd4', color: '#8b2035' }}>+ Use</span>
+                  <p className="text-sm font-medium truncate" style={{ color: '#3a1a20' }}>"{query.trim()}"</p>
                   {suggestions.length === 0 && vivinoSugs.length === 0 && (
                     <p className="text-xs shrink-0" style={{ color: '#a07060' }}>not in catalogue</p>
                   )}
@@ -383,36 +416,132 @@ export default function AddWinePage() {
         {fromCat && !pendingVivino && (
           <p className="text-xs mt-1" style={{ color: '#2e7d32' }}>✓ Auto-filled from wine catalogue</p>
         )}
+      </div>
+      )}
 
-        {/* ── Vintage picker (appears after selecting a Vivino wine) ── */}
-        {pendingVivino && (
-          <div className="mt-2 rounded-xl px-4 py-3"
-               style={{ background: '#ecddd4', border: '1px solid #d4b8aa' }}>
-            <p className="text-xs font-semibold mb-2" style={{ color: '#a07060' }}>
-              SELECT VINTAGE
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {pendingVivino.vintages.map(yr => (
-                <button
-                  key={yr}
-                  onClick={() => pickVivinoVintage(yr)}
-                  className="px-3 py-1.5 rounded-lg text-sm font-semibold"
-                  style={{ background: '#8b2035', color: 'white' }}
-                >
-                  {yr}
-                </button>
-              ))}
-              <button
-                onClick={() => pickVivinoVintage('')}
-                className="px-3 py-1.5 rounded-lg text-sm font-medium"
-                style={{ background: '#f5ede6', color: '#a07060', border: '1px solid #d4b8aa' }}
-              >
-                Unknown
+      {/* ── Filter mode ── */}
+      {mode === 'filter' && (
+      <div className="space-y-3">
+        {/* Producer */}
+        <div>
+          <p className="mb-1.5" style={labelStyle}>Producer</p>
+          <input className={inputCls} style={inputStyle} placeholder="e.g. Gibson, Penfolds, Bollinger"
+            value={fProducer} onChange={e => setFProducer(e.target.value)} autoComplete="off" />
+        </div>
+
+        {/* Variety */}
+        <div>
+          <p className="mb-1.5" style={labelStyle}>Variety</p>
+          <input className={inputCls} style={inputStyle} placeholder="e.g. Shiraz, Pinot Noir, Chardonnay"
+            value={fVariety} onChange={e => setFVariety(e.target.value)} autoComplete="off" />
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {['Shiraz','Cabernet Sauvignon','Pinot Noir','Chardonnay','Sauvignon Blanc','Riesling','Merlot','Grenache'].map(g => (
+              <button key={g} onClick={() => setFVariety(fVariety === g ? '' : g)}
+                className="px-2.5 py-1 rounded-full text-xs font-medium"
+                style={{ background: fVariety === g ? '#8b2035' : '#ecddd4', color: fVariety === g ? 'white' : '#a07060', border: '1px solid #d4b8aa' }}>
+                {g}
               </button>
-            </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Vintage */}
+        <div>
+          <p className="mb-1.5" style={labelStyle}>Vintage</p>
+          <select className={inputCls} style={inputStyle} value={fVintage}
+            onChange={e => setFVintage(e.target.value ? parseInt(e.target.value) : '')}>
+            <option value="">Any year</option>
+            {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+
+        {/* Results */}
+        {filterSearching && (
+          <div className="flex items-center gap-2 py-2" style={{ color: '#a07060' }}>
+            <div className="w-4 h-4 border-2 rounded-full animate-spin shrink-0"
+                 style={{ borderColor: '#d4b8aa', borderTopColor: '#8b2035' }} />
+            <span className="text-sm">Searching…</span>
           </div>
         )}
+
+        {!filterSearching && (filterResults.length > 0 || filterVivino.length > 0) && (
+          <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #d4b8aa' }}>
+            <div className="px-4 py-2" style={{ background: '#ecddd4' }}>
+              <span className="text-xs font-semibold tracking-wide" style={{ color: '#a07060' }}>
+                {filterResults.length + filterVivino.length} match{filterResults.length + filterVivino.length !== 1 ? 'es' : ''} — tap to select
+              </span>
+            </div>
+
+            {filterResults.map(w => (
+              <button key={`fr-${w.id}`} onClick={() => { pickSuggestion(w); setMode('search') }}
+                className="w-full text-left px-4 py-3 border-b flex items-start gap-3"
+                style={{ background: '#f5ede6', borderColor: '#e8d8cc' }}>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm truncate" style={{ color: '#3a1a20' }}>{w.title}</p>
+                  <p className="text-xs truncate mt-0.5" style={{ color: '#a07060' }}>
+                    {[w.winery, w.region, w.vintage].filter(Boolean).join(' · ')}
+                    {w.price_aud ? ` · A$${w.price_aud}` : ''}
+                  </p>
+                </div>
+                {w.points && <span className="text-xs font-bold shrink-0 px-1.5 py-0.5 rounded" style={{ background: '#8b2035', color: 'white' }}>{w.points}</span>}
+              </button>
+            ))}
+
+            {filterVivino.length > 0 && (
+              <>
+                {filterResults.length > 0 && (
+                  <div className="px-4 py-1.5" style={{ background: '#ecddd4' }}>
+                    <span className="text-xs font-semibold tracking-wide" style={{ color: '#a07060' }}>Also on Vivino</span>
+                  </div>
+                )}
+                {filterVivino.map(v => (
+                  <button key={`fv-${v.id}`} onClick={() => pickVivinoWine(v)}
+                    className="w-full text-left px-4 py-3 border-b flex items-start gap-3"
+                    style={{ background: '#f5ede6', borderColor: '#e8d8cc' }}>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm truncate" style={{ color: '#3a1a20' }}>{v.title}</p>
+                      <p className="text-xs mt-0.5" style={{ color: '#a07060' }}>
+                        {v.vintages.slice(0, 4).join(', ')}{v.vintages.length > 4 ? '…' : ''}
+                      </p>
+                    </div>
+                    {v.points && <span className="text-xs font-bold shrink-0 px-1.5 py-0.5 rounded" style={{ background: '#8b2035', color: 'white' }}>{v.points}</span>}
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
+        )}
+
+        {!filterSearching && filterResults.length === 0 && filterVivino.length === 0 &&
+          (fProducer.length >= 2 || fVariety.length >= 2 || fVintage !== '') && (
+          <p className="text-sm" style={{ color: '#a07060' }}>No matches found — try broader terms.</p>
+        )}
       </div>
+      )}
+
+      {/* ── Vintage picker (appears after selecting a Vivino wine, either mode) ── */}
+      {pendingVivino && (
+        <div className="rounded-xl px-4 py-3"
+             style={{ background: '#ecddd4', border: '1px solid #d4b8aa' }}>
+          <p className="text-xs font-semibold mb-2" style={{ color: '#a07060' }}>
+            SELECT VINTAGE FOR {pendingVivino.title.toUpperCase()}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {pendingVivino.vintages.map(yr => (
+              <button key={yr} onClick={() => pickVivinoVintage(yr)}
+                className="px-3 py-1.5 rounded-lg text-sm font-semibold"
+                style={{ background: '#8b2035', color: 'white' }}>
+                {yr}
+              </button>
+            ))}
+            <button onClick={() => pickVivinoVintage('')}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium"
+              style={{ background: '#f5ede6', color: '#a07060', border: '1px solid #d4b8aa' }}>
+              Unknown
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Producer ── */}
       <div>
