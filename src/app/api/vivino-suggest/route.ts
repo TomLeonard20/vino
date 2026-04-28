@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { normalizeScore } from '@/lib/score-normalizer'
 
 /**
- * Vivino typeahead — supplements the WE catalogue search for wines (especially
- * AU/NZ/EU) that don't appear in the Wine Enthusiast catalogue.
+ * Vivino typeahead — supplements the WE catalogue for wines not in the
+ * Wine Enthusiast catalogue (AU/NZ/EU-heavy wines especially).
  *
- * Returns results in the same shape as /api/wine-search so the frontend
- * can merge them seamlessly.
+ * Returns ONE entry per wine name with a `vintages` array so the UI
+ * can show a vintage picker after the user selects the wine.
  */
 
 const NOISE = new Set([
@@ -16,7 +16,6 @@ const NOISE = new Set([
 
 function isNoise(n: string) { return NOISE.has(n.toLowerCase()) }
 
-/** Pull vintage year from the end of a Vivino wine name. */
 function splitVintage(raw: string): { name: string; vintage: number | null } {
   const now   = new Date().getFullYear()
   const match = raw.match(/\s+(\d{4})$/)
@@ -27,6 +26,14 @@ function splitVintage(raw: string): { name: string; vintage: number | null } {
     }
   }
   return { name: raw, vintage: null }
+}
+
+export interface VivinoSuggestion {
+  id:       number      // Vivino wine ID of the most-rated vintage
+  title:    string      // wine name without vintage
+  vintages: number[]    // available vintages, newest first
+  points:   number      // normalised score (WE scale)
+  source:   'Vivino'
 }
 
 export async function GET(req: NextRequest) {
@@ -48,64 +55,52 @@ export async function GET(req: NextRequest) {
 
     const text = (await res.text()).replace(/&quot;/g, '"').replace(/&amp;/g, '&')
 
-    // Extract structured vintage entries from Vivino's embedded JSON
     const raw = [
       ...text.matchAll(
         /"vintage":\{"id":(\d+),"seo_name":"([^"]+)","name":"([^"]+)","statistics":\{[^}]*"ratings_average":([\d.]+)/g,
       ),
     ]
 
-    // Normalise query words for relevance ranking
+    // Score relevance by query word overlap
     const qWords = q.toLowerCase().split(/\s+/).filter(w => w.length > 2)
-
-    function relevance(wineName: string): number {
-      const nameLower = wineName.toLowerCase()
-      return qWords.filter(w => nameLower.includes(w)).length / Math.max(qWords.length, 1)
+    function relevance(n: string) {
+      const nl = n.toLowerCase()
+      return qWords.filter(w => nl.includes(w)).length / Math.max(qWords.length, 1)
     }
 
-    const seen = new Set<string>()
-    // Collect all valid candidates first (scan more results before slicing)
-    const candidates = raw
-      .filter(m => {
-        const rating = parseFloat(m[4])
-        if (rating < 3.0) return false
-        if (isNoise(m[3])) return false
-        // Deduplicate by name-without-vintage so "Dirtman 2022" and "Dirtman 2023"
-        // are both kept but exact duplicates are dropped
-        const { name: dedupKey } = splitVintage(m[3])
-        if (seen.has(m[3])) return false
-        seen.add(m[3])
-        return true
-      })
+    // Group by wine name (sans vintage), newest vintage first
+    const groups = new Map<string, { id: number; vintages: number[]; rating: number; rel: number; pos: number }>()
+    const seenExact = new Set<string>()
 
-    // Sort by query relevance (descending), keeping original Vivino rank as tiebreak
-    const sorted = candidates
-      .map((m, i) => ({ m, rel: relevance(m[3]), pos: i }))
-      .sort((a, b) => b.rel - a.rel || a.pos - b.pos)
-      .slice(0, 8)
+    raw.forEach((m, pos) => {
+      const rating = parseFloat(m[4])
+      if (rating < 3.0 || isNoise(m[3])) return
+      if (seenExact.has(m[3])) return   // skip exact duplicates from Vivino
+      seenExact.add(m[3])
 
-    const results = sorted.map(({ m }) => {
-        const { name, vintage } = splitVintage(m[3])
-        const rawRating         = parseFloat(m[4])
-        const normScore         = normalizeScore(rawRating, 'Vivino')
+      const { name, vintage } = splitVintage(m[3])
+      const rel = relevance(name)
 
-        return {
-          // Match CatalogueWine shape so the frontend handles it uniformly
-          id:          parseInt(m[1]),
-          title:       name,
-          winery:      '',   // not available in search results
-          variety:     '',
-          country:     '',
-          province:    '',
-          region:      '',
-          vintage,
-          points:      normScore,
-          price_usd:   null,
-          price_aud:   null,
-          description: '',
-          source:      'Vivino' as const,
-        }
-      })
+      if (!groups.has(name)) {
+        groups.set(name, { id: parseInt(m[1]), vintages: [], rating, rel, pos })
+      }
+      const g = groups.get(name)!
+      if (vintage) g.vintages.push(vintage)
+      // keep the id + rating of the entry with the most ratings (proxy: highest rating)
+      if (rating > g.rating) { g.rating = rating; g.id = parseInt(m[1]) }
+    })
+
+    // Sort groups by relevance then original position, take top 6 unique wines
+    const results: VivinoSuggestion[] = [...groups.entries()]
+      .sort(([, a], [, b]) => b.rel - a.rel || a.pos - b.pos)
+      .slice(0, 6)
+      .map(([name, g]) => ({
+        id:       g.id,
+        title:    name,
+        vintages: g.vintages.sort((a, b) => b - a),  // newest first
+        points:   normalizeScore(g.rating, 'Vivino'),
+        source:   'Vivino' as const,
+      }))
 
     return NextResponse.json({ results })
   } catch {

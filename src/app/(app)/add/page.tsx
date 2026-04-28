@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { WineType } from '@/types/database'
 import type { CatalogueWine } from '@/app/api/wine-search/route'
+import type { VivinoSuggestion } from '@/app/api/vivino-suggest/route'
 import type { DrinkingWindowResult } from '@/app/api/drinking-window/route'
 
 const WINE_TYPES: WineType[] = ['Red', 'White', 'Rosé', 'Champagne']
@@ -55,7 +56,8 @@ export default function AddWinePage() {
   // Typeahead
   const [query,          setQuery]          = useState('')
   const [suggestions,    setSuggestions]    = useState<CatalogueWine[]>([])
-  const [vivinoSugs,     setVivinoSugs]     = useState<(CatalogueWine & { source?: string })[]>([])
+  const [vivinoSugs,     setVivinoSugs]     = useState<VivinoSuggestion[]>([])
+  const [pendingVivino,  setPendingVivino]  = useState<VivinoSuggestion | null>(null)
   const [searching,      setSearching]      = useState(false)
   const [showDrop,       setShowDrop]       = useState(false)
   const [fromCat,        setFromCat]        = useState(false)
@@ -92,15 +94,15 @@ export default function AddWinePage() {
         fetch(`/api/vivino-suggest?q=${q}`).then(r => r.json()),
       ])
 
-      const catResults    = catRes.status    === 'fulfilled' ? (catRes.value.results    ?? []) : []
-      const vivinoResults = vivinoRes.status === 'fulfilled' ? (vivinoRes.value.results ?? []) : []
+      const catResults:    CatalogueWine[]    = catRes.status    === 'fulfilled' ? (catRes.value.results    ?? []) : []
+      const vivinoResults: VivinoSuggestion[] = vivinoRes.status === 'fulfilled' ? (vivinoRes.value.results ?? []) : []
 
-      // Dedup Vivino results against catalogue: remove if name already well-covered
-      const catTitles = catResults.map((w: CatalogueWine) => w.title.toLowerCase())
-      const deduped   = vivinoResults.filter((v: CatalogueWine & { source?: string }) => {
-        const vWords = v.title.toLowerCase().split(/\s+/)
-        return !catTitles.some((t: string) =>
-          vWords.filter(w => t.includes(w) && w.length > 3).length >= 2
+      // Remove Vivino entries whose title is already well-covered by a catalogue result
+      const catTitles = catResults.map(w => w.title.toLowerCase())
+      const deduped   = vivinoResults.filter(v => {
+        const vWords = v.title.toLowerCase().split(/\s+/).filter(w => w.length > 3)
+        return !catTitles.some(t =>
+          vWords.filter(w => t.includes(w)).length >= 2
         )
       })
 
@@ -113,26 +115,20 @@ export default function AddWinePage() {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [query])
 
-  function pickSuggestion(w: CatalogueWine & { source?: string }) {
-    // For Vivino results the title may contain the grape ("Gibson The Dirtman Shiraz")
-    // Try to infer grape/variety from common keywords in the title
-    const KNOWN_GRAPES = ['Shiraz','Cabernet Sauvignon','Pinot Noir','Chardonnay',
-      'Sauvignon Blanc','Riesling','Merlot','Grenache','Nebbiolo','Sangiovese',
-      'Tempranillo','Zinfandel','Pinot Gris','Pinot Grigio','Viognier','Malbec',
-      'Cabernet Franc','Syrah','Gewürztraminer','Moscato','Prosecco']
-    const titleLower = w.title.toLowerCase()
-    const inferredGrape = w.variety
-      || KNOWN_GRAPES.find(g => titleLower.includes(g.toLowerCase()))
-      || ''
+  const KNOWN_GRAPES = ['Shiraz','Cabernet Sauvignon','Pinot Noir','Chardonnay',
+    'Sauvignon Blanc','Riesling','Merlot','Grenache','Nebbiolo','Sangiovese',
+    'Tempranillo','Zinfandel','Pinot Gris','Pinot Grigio','Viognier','Malbec',
+    'Cabernet Franc','Syrah','Gewürztraminer','Moscato','Prosecco']
 
-    const grapeList = inferredGrape ? [inferredGrape] : []
+  /** Pick a catalogue result — fills all fields immediately */
+  function pickSuggestion(w: CatalogueWine) {
+    const grapeList = w.variety ? [w.variety] : []
     const detected  = detectWineType(grapeList, w.title, w.region ?? '')
-
     const cleanName = cleanWineName(w.title)
     setName(cleanName)
     setProducer(w.winery ?? '')
     setRegion(w.region ?? w.province ?? '')
-    setGrapes(inferredGrape)
+    setGrapes(w.variety ?? '')
     setVintage(w.vintage ?? '')
     setWineType(detected)
     setQuery(cleanName)
@@ -141,6 +137,38 @@ export default function AddWinePage() {
     setCatPoints(w.points ?? null)
     setCatPriceAud(w.price_aud ?? null)
     setDrinkWindow(null)
+  }
+
+  /** Pick a Vivino grouped result — fills name then shows vintage picker */
+  function pickVivinoWine(v: VivinoSuggestion) {
+    setQuery(v.title)
+    setName(v.title)
+    setProducer('')
+    setRegion('')
+    setGrapes(KNOWN_GRAPES.find(g => v.title.toLowerCase().includes(g.toLowerCase())) ?? '')
+    setVintage('')
+    setWineType(detectWineType(
+      [KNOWN_GRAPES.find(g => v.title.toLowerCase().includes(g.toLowerCase())) ?? ''],
+      v.title, '',
+    ))
+    setCatPoints(v.points)
+    setCatPriceAud(null)
+    setShowDrop(false)
+    setFromCat(true)
+    setDrinkWindow(null)
+    // If only one vintage known, set it directly; otherwise show picker
+    if (v.vintages.length === 1) {
+      setVintage(v.vintages[0])
+      setPendingVivino(null)
+    } else {
+      setPendingVivino(v)
+    }
+  }
+
+  /** Confirm vintage selection from the Vivino picker */
+  function pickVivinoVintage(yr: number | '') {
+    setVintage(yr)
+    setPendingVivino(null)
   }
 
   // ── Estimate drinking window ───────────────────────────────────
@@ -290,36 +318,38 @@ export default function AddWinePage() {
                   </button>
                 ))}
 
-                {/* ── Vivino results ── */}
+                {/* ── Vivino results (one per wine, no vintage) ── */}
                 {vivinoSugs.length > 0 && (
                   <>
                     {suggestions.length > 0 && (
-                      <div className="px-4 py-1.5 flex items-center gap-2"
+                      <div className="px-4 py-1.5"
                            style={{ background: '#ecddd4' }}>
                         <span className="text-xs font-semibold tracking-wide" style={{ color: '#a07060' }}>
                           Also on Vivino
                         </span>
                       </div>
                     )}
-                    {vivinoSugs.map(w => (
+                    {vivinoSugs.map(v => (
                       <button
-                        key={`viv-${w.id}`}
-                        onMouseDown={() => pickSuggestion(w)}
+                        key={`viv-${v.id}`}
+                        onMouseDown={() => pickVivinoWine(v)}
                         className="w-full text-left px-4 py-3 border-b flex items-start gap-3"
                         style={{ borderColor: '#e8d8cc' }}
                       >
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-sm truncate" style={{ color: '#3a1a20' }}>
-                            {w.title}
+                            {v.title}
                           </p>
-                          <p className="text-xs truncate mt-0.5" style={{ color: '#a07060' }}>
-                            {w.vintage ? `${w.vintage} · ` : ''}Community rating
+                          <p className="text-xs mt-0.5" style={{ color: '#a07060' }}>
+                            {v.vintages.length > 0
+                              ? `${v.vintages.slice(0, 3).join(', ')}${v.vintages.length > 3 ? '…' : ''}`
+                              : 'Vivino community'}
                           </p>
                         </div>
-                        {w.points && (
+                        {v.points && (
                           <span className="text-xs font-bold shrink-0 px-1.5 py-0.5 rounded"
                                 style={{ background: '#8b2035', color: 'white' }}>
-                            {w.points}
+                            {v.points}
                           </span>
                         )}
                       </button>
@@ -350,8 +380,37 @@ export default function AddWinePage() {
             </>
           )}
         </div>
-        {fromCat && (
+        {fromCat && !pendingVivino && (
           <p className="text-xs mt-1" style={{ color: '#2e7d32' }}>✓ Auto-filled from wine catalogue</p>
+        )}
+
+        {/* ── Vintage picker (appears after selecting a Vivino wine) ── */}
+        {pendingVivino && (
+          <div className="mt-2 rounded-xl px-4 py-3"
+               style={{ background: '#ecddd4', border: '1px solid #d4b8aa' }}>
+            <p className="text-xs font-semibold mb-2" style={{ color: '#a07060' }}>
+              SELECT VINTAGE
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {pendingVivino.vintages.map(yr => (
+                <button
+                  key={yr}
+                  onClick={() => pickVivinoVintage(yr)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-semibold"
+                  style={{ background: '#8b2035', color: 'white' }}
+                >
+                  {yr}
+                </button>
+              ))}
+              <button
+                onClick={() => pickVivinoVintage('')}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium"
+                style={{ background: '#f5ede6', color: '#a07060', border: '1px solid #d4b8aa' }}
+              >
+                Unknown
+              </button>
+            </div>
+          </div>
         )}
       </div>
 
