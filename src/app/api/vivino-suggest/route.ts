@@ -55,18 +55,36 @@ export async function GET(req: NextRequest) {
       ),
     ]
 
+    // Normalise query words for relevance ranking
+    const qWords = q.toLowerCase().split(/\s+/).filter(w => w.length > 2)
+
+    function relevance(wineName: string): number {
+      const nameLower = wineName.toLowerCase()
+      return qWords.filter(w => nameLower.includes(w)).length / Math.max(qWords.length, 1)
+    }
+
     const seen = new Set<string>()
-    const results = raw
+    // Collect all valid candidates first (scan more results before slicing)
+    const candidates = raw
       .filter(m => {
         const rating = parseFloat(m[4])
-        if (rating < 3.0) return false            // too low / unrated
+        if (rating < 3.0) return false
         if (isNoise(m[3])) return false
-        if (seen.has(m[3])) return false          // deduplicate by exact name
+        // Deduplicate by name-without-vintage so "Dirtman 2022" and "Dirtman 2023"
+        // are both kept but exact duplicates are dropped
+        const { name: dedupKey } = splitVintage(m[3])
+        if (seen.has(m[3])) return false
         seen.add(m[3])
         return true
       })
-      .slice(0, 6)
-      .map(m => {
+
+    // Sort by query relevance (descending), keeping original Vivino rank as tiebreak
+    const sorted = candidates
+      .map((m, i) => ({ m, rel: relevance(m[3]), pos: i }))
+      .sort((a, b) => b.rel - a.rel || a.pos - b.pos)
+      .slice(0, 8)
+
+    const results = sorted.map(({ m }) => {
         const { name, vintage } = splitVintage(m[3])
         const rawRating         = parseFloat(m[4])
         const normScore         = normalizeScore(rawRating, 'Vivino')
