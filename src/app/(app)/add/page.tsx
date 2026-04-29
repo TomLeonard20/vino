@@ -88,6 +88,7 @@ export default function AddWinePage() {
 
     setCatSearching(true)
     setVivSearching(true)
+    setShowDrop(true)   // open the dropdown immediately so the loading state is visible
 
     debounceRef.current = setTimeout(() => {
       const q = encodeURIComponent(query)
@@ -99,7 +100,6 @@ export default function AddWinePage() {
           const results: CatalogueWine[] = data.results ?? []
           latestCatRef.current = results
           setSuggestions(results)
-          setShowDrop(true)
           setCatSearching(false)
         })
         .catch(() => setCatSearching(false))
@@ -109,14 +109,22 @@ export default function AddWinePage() {
         .then(r => r.json())
         .then(data => {
           const vivinoResults: VivinoSuggestion[] = data.results ?? []
-          // Dedup against whatever catalogue results arrived
+          // Dedup: skip Vivino entry if 2+ distinctive (non-variety) words match a catalogue title.
+          // We exclude common variety words so that e.g. 'shiraz' alone can't trigger a false match.
+          const VARIETIES = new Set(['shiraz','cabernet','sauvignon','pinot','blanc','noir',
+            'chardonnay','riesling','merlot','grenache','tempranillo','zinfandel',
+            'viognier','malbec','syrah','muscat','prosecco','champagne','chablis',
+            'bordeaux','burgundy','reserve','estate','block','single','classic'])
           const catTitles = latestCatRef.current.map(w => w.title.toLowerCase())
           const deduped = vivinoResults.filter(v => {
-            const vWords = v.title.toLowerCase().split(/\s+/).filter(w => w.length > 3)
-            return !catTitles.some(t => vWords.filter(w => t.includes(w)).length >= 2)
+            const vWords = v.title.toLowerCase().split(/\s+/)
+              .filter(w => w.length > 4 && !VARIETIES.has(w))
+            if (vWords.length === 0) return true   // no distinctive words → keep
+            const matchCount = catTitles.reduce((n, t) =>
+              n + vWords.filter(w => t.includes(w)).length, 0)
+            return matchCount < 2
           })
           setVivinoSugs(deduped)
-          setShowDrop(true)
           setVivSearching(false)
         })
         .catch(() => setVivSearching(false))
@@ -283,7 +291,7 @@ export default function AddWinePage() {
             placeholder="Search by name, producer or style…"
             value={query}
             onChange={e => { setQuery(e.target.value); setName(e.target.value); setFromCat(false) }}
-            onFocus={() => (suggestions.length > 0 || vivinoSugs.length > 0) && setShowDrop(true)}
+            onFocus={() => query.length >= 2 && setShowDrop(true)}
             autoComplete="off"
           />
           {(catSearching || vivSearching) && (
@@ -292,7 +300,10 @@ export default function AddWinePage() {
                    style={{ borderColor: '#d4b8aa', borderTopColor: '#8b2035' }} />
             </div>
           )}
-          {showDrop && (suggestions.length > 0 || vivinoSugs.length > 0 || (!(catSearching || vivSearching) && query.length >= 2)) && (
+          {/* Dropdown: show whenever searching OR there are results to show.
+               Previously it hid itself while Vivino was loading but catalogue was empty,
+               making wines like Gibson The Dirtman (not in WE catalogue) invisible. */}
+          {showDrop && query.length >= 2 && (catSearching || vivSearching || suggestions.length > 0 || vivinoSugs.length > 0) && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setShowDrop(false)} />
               <div className="absolute left-0 right-0 top-full mt-1 z-20 rounded-xl overflow-hidden shadow-lg"
@@ -313,6 +324,15 @@ export default function AddWinePage() {
                     {w.points && <span className="text-xs font-bold shrink-0 px-1.5 py-0.5 rounded" style={{ background: '#8b2035', color: 'white' }}>{w.points}</span>}
                   </button>
                 ))}
+
+                {/* Vivino loading indicator — shown whether or not catalogue has results */}
+                {vivSearching && (
+                  <div className="px-4 py-2.5 flex items-center gap-2 border-b" style={{ background: '#ecddd4', borderColor: '#e8d8cc' }}>
+                    <div className="w-3 h-3 border-2 rounded-full animate-spin shrink-0"
+                         style={{ borderColor: '#d4b8aa', borderTopColor: '#8b2035' }} />
+                    <span className="text-xs" style={{ color: '#a07060' }}>Searching more sources…</span>
+                  </div>
+                )}
 
                 {/* Vivino results append when they arrive */}
                 {vivinoSugs.length > 0 && (
@@ -338,16 +358,7 @@ export default function AddWinePage() {
                   </>
                 )}
 
-                {/* Vivino still loading indicator inside dropdown */}
-                {vivSearching && suggestions.length > 0 && (
-                  <div className="px-4 py-2 flex items-center gap-2" style={{ background: '#ecddd4' }}>
-                    <div className="w-3 h-3 border-2 rounded-full animate-spin shrink-0"
-                         style={{ borderColor: '#d4b8aa', borderTopColor: '#8b2035' }} />
-                    <span className="text-xs" style={{ color: '#a07060' }}>Searching more sources…</span>
-                  </div>
-                )}
-
-                {/* Manual entry fallback */}
+                {/* Manual entry fallback — always shown at the bottom */}
                 <button onMouseDown={() => { setName(query.trim()); setQuery(query.trim()); setShowDrop(false); setFromCat(false) }}
                   className="w-full text-left px-4 py-3 flex items-center gap-2">
                   <span className="text-xs px-1.5 py-0.5 rounded font-medium shrink-0" style={{ background: '#ecddd4', color: '#8b2035' }}>+ Use</span>
