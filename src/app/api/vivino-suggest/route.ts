@@ -41,8 +41,9 @@ export async function GET(req: NextRequest) {
   if (!q || q.length < 2) return NextResponse.json({ results: [] })
 
   try {
+    // Vivino redirects /en/search/wines → /en/explore; use the current URL directly
     const res = await fetch(
-      `https://www.vivino.com/en/search/wines?q=${encodeURIComponent(q)}`,
+      `https://www.vivino.com/en/explore?search_term=${encodeURIComponent(q)}`,
       {
         headers: {
           'User-Agent':      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
