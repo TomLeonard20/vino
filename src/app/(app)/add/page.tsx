@@ -66,6 +66,7 @@ export default function AddWinePage() {
   const [catPriceAud,   setCatPriceAud]   = useState<number | null>(null)
   const debounceRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
   const latestCatRef   = useRef<CatalogueWine[]>([])   // for Vivino dedup
+  const activeQueryRef = useRef<string>('')              // guards against stale responses
 
   // Drinking window
   const [drinkWindow, setDrinkWindow] = useState<DrinkingWindowResult | null>(null)
@@ -86,36 +87,39 @@ export default function AddWinePage() {
       return
     }
 
-    // Clear stale results immediately so the previous query's ordering doesn't
-    // persist while the new fetch is in flight (e.g. typing "gibson the dirt"
-    // after "gibson the" would otherwise leave The Smithy at #1 for ~1–2 s).
+    // Clear stale results immediately and stamp the active query.
+    // activeQueryRef lets each async callback check whether it is still
+    // the latest request before writing to state — prevents a slow response
+    // for "gibson" overwriting the correct results for "gibson the dirtman".
     setSuggestions([])
     setVivinoSugs([])
     setCatSearching(true)
     setVivSearching(true)
     setShowDrop(true)
+    activeQueryRef.current = query
 
     debounceRef.current = setTimeout(() => {
-      const q = encodeURIComponent(query)
+      const q       = encodeURIComponent(query)
+      const thisQ   = query   // close over the query this timeout was created for
 
       // ── Catalogue (fast) ──────────────────────────────────────
       fetch(`/api/wine-search?q=${q}&limit=8`)
         .then(r => r.json())
         .then(data => {
+          if (activeQueryRef.current !== thisQ) return   // stale — discard
           const results: CatalogueWine[] = data.results ?? []
           latestCatRef.current = results
           setSuggestions(results)
           setCatSearching(false)
         })
-        .catch(() => setCatSearching(false))
+        .catch(() => { if (activeQueryRef.current === thisQ) setCatSearching(false) })
 
       // ── Vivino (slower, appends to open dropdown) ─────────────
       fetch(`/api/vivino-suggest?q=${q}`)
         .then(r => r.json())
         .then(data => {
+          if (activeQueryRef.current !== thisQ) return   // stale — discard
           const vivinoResults: VivinoSuggestion[] = data.results ?? []
-          // Dedup: skip Vivino entry if 2+ distinctive (non-variety) words match a catalogue title.
-          // We exclude common variety words so that e.g. 'shiraz' alone can't trigger a false match.
           const VARIETIES = new Set(['shiraz','cabernet','sauvignon','pinot','blanc','noir',
             'chardonnay','riesling','merlot','grenache','tempranillo','zinfandel',
             'viognier','malbec','syrah','muscat','prosecco','champagne','chablis',
@@ -124,7 +128,7 @@ export default function AddWinePage() {
           const deduped = vivinoResults.filter(v => {
             const vWords = v.title.toLowerCase().split(/\s+/)
               .filter(w => w.length > 4 && !VARIETIES.has(w))
-            if (vWords.length === 0) return true   // no distinctive words → keep
+            if (vWords.length === 0) return true
             const matchCount = catTitles.reduce((n, t) =>
               n + vWords.filter(w => t.includes(w)).length, 0)
             return matchCount < 2
@@ -132,7 +136,7 @@ export default function AddWinePage() {
           setVivinoSugs(deduped)
           setVivSearching(false)
         })
-        .catch(() => setVivSearching(false))
+        .catch(() => { if (activeQueryRef.current === thisQ) setVivSearching(false) })
     }, 300)
 
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
