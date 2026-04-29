@@ -86,9 +86,14 @@ export default function AddWinePage() {
       return
     }
 
+    // Clear stale results immediately so the previous query's ordering doesn't
+    // persist while the new fetch is in flight (e.g. typing "gibson the dirt"
+    // after "gibson the" would otherwise leave The Smithy at #1 for ~1–2 s).
+    setSuggestions([])
+    setVivinoSugs([])
     setCatSearching(true)
     setVivSearching(true)
-    setShowDrop(true)   // open the dropdown immediately so the loading state is visible
+    setShowDrop(true)
 
     debounceRef.current = setTimeout(() => {
       const q = encodeURIComponent(query)
