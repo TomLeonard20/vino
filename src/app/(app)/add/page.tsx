@@ -57,7 +57,7 @@ export default function AddWinePage() {
   const [query,         setQuery]         = useState('')
   const [suggestions,   setSuggestions]   = useState<CatalogueWine[]>([])
   const [vivinoSugs,    setVivinoSugs]    = useState<VivinoSuggestion[]>([])
-  const [pendingVivino, setPendingVivino] = useState<VivinoSuggestion | null>(null)
+
   const [catSearching,  setCatSearching]  = useState(false)
   const [vivSearching,  setVivSearching]  = useState(false)
   const [showDrop,      setShowDrop]      = useState(false)
@@ -157,36 +157,21 @@ export default function AddWinePage() {
     setDrinkWindow(null)
   }
 
-  /** Pick a Vivino grouped result — fills name then shows vintage picker */
+  /** Pick a Vivino result — fills all fields, leaves vintage for the select below */
   function pickVivinoWine(v: VivinoSuggestion) {
+    const grape = KNOWN_GRAPES.find(g => v.title.toLowerCase().includes(g.toLowerCase())) ?? ''
     setQuery(v.title)
     setName(v.title)
     setProducer('')
     setRegion('')
-    setGrapes(KNOWN_GRAPES.find(g => v.title.toLowerCase().includes(g.toLowerCase())) ?? '')
+    setGrapes(grape)
     setVintage('')
-    setWineType(detectWineType(
-      [KNOWN_GRAPES.find(g => v.title.toLowerCase().includes(g.toLowerCase())) ?? ''],
-      v.title, '',
-    ))
+    setWineType(detectWineType([grape], v.title, ''))
     setCatPoints(v.points)
     setCatPriceAud(null)
     setShowDrop(false)
     setFromCat(true)
     setDrinkWindow(null)
-    // If only one vintage known, set it directly; otherwise show picker
-    if (v.vintages.length === 1) {
-      setVintage(v.vintages[0])
-      setPendingVivino(null)
-    } else {
-      setPendingVivino(v)
-    }
-  }
-
-  /** Confirm vintage selection from the Vivino picker */
-  function pickVivinoVintage(yr: number | '') {
-    setVintage(yr)
-    setPendingVivino(null)
   }
 
   // ── Estimate drinking window ───────────────────────────────────
@@ -374,34 +359,10 @@ export default function AddWinePage() {
             </>
           )}
         </div>
-        {fromCat && !pendingVivino && (
-          <p className="text-xs mt-1" style={{ color: '#2e7d32' }}>✓ Auto-filled from wine catalogue</p>
+        {fromCat && (
+          <p className="text-xs mt-1" style={{ color: '#2e7d32' }}>✓ Auto-filled — select vintage below</p>
         )}
       </div>
-
-      {/* ── Vintage picker (appears after selecting a Vivino wine) ── */}
-      {pendingVivino && (
-        <div className="rounded-xl px-4 py-3"
-             style={{ background: '#ecddd4', border: '1px solid #d4b8aa' }}>
-          <p className="text-xs font-semibold mb-2" style={{ color: '#a07060' }}>
-            SELECT VINTAGE FOR {pendingVivino.title.toUpperCase()}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {pendingVivino.vintages.map(yr => (
-              <button key={yr} onClick={() => pickVivinoVintage(yr)}
-                className="px-3 py-1.5 rounded-lg text-sm font-semibold"
-                style={{ background: '#8b2035', color: 'white' }}>
-                {yr}
-              </button>
-            ))}
-            <button onClick={() => pickVivinoVintage('')}
-              className="px-3 py-1.5 rounded-lg text-sm font-medium"
-              style={{ background: '#f5ede6', color: '#a07060', border: '1px solid #d4b8aa' }}>
-              Unknown
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* ── Producer ── */}
       <div>
