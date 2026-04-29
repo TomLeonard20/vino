@@ -56,9 +56,10 @@ export async function GET(req: NextRequest) {
 
     const text = (await res.text()).replace(/&quot;/g, '"').replace(/&amp;/g, '&')
 
+    // Capture id, name, ratings_count and ratings_average in one pass
     const raw = [
       ...text.matchAll(
-        /"vintage":\{"id":(\d+),"seo_name":"([^"]+)","name":"([^"]+)","statistics":\{[^}]*"ratings_average":([\d.]+)/g,
+        /"vintage":\{"id":(\d+),"seo_name":"[^"]+","name":"([^"]+)","statistics":\{"status":"[^"]*","ratings_count":(\d+),"ratings_average":([\d.]+)/g,
       ),
     ]
 
@@ -69,35 +70,44 @@ export async function GET(req: NextRequest) {
       return qWords.filter(w => nl.includes(w)).length / Math.max(qWords.length, 1)
     }
 
-    // Group by wine name (sans vintage), newest vintage first
-    const groups = new Map<string, { id: number; vintages: number[]; rating: number; rel: number; pos: number }>()
+    // Group by wine name (sans vintage)
+    const groups = new Map<string, {
+      id: number; vintages: number[]
+      rating: number; ratingCount: number
+      rel: number; pos: number
+    }>()
     const seenExact = new Set<string>()
 
     raw.forEach((m, pos) => {
-      const rating = parseFloat(m[4])
-      if (rating < 3.0 || isNoise(m[3])) return
-      if (seenExact.has(m[3])) return   // skip exact duplicates from Vivino
-      seenExact.add(m[3])
+      const ratingCount = parseInt(m[3])
+      const rating      = parseFloat(m[4])
+      if (rating < 3.0 || isNoise(m[2])) return
+      if (seenExact.has(m[2])) return
+      seenExact.add(m[2])
 
-      const { name, vintage } = splitVintage(m[3])
+      const { name, vintage } = splitVintage(m[2])
       const rel = relevance(name)
 
       if (!groups.has(name)) {
-        groups.set(name, { id: parseInt(m[1]), vintages: [], rating, rel, pos })
+        groups.set(name, { id: parseInt(m[1]), vintages: [], rating, ratingCount, rel, pos })
       }
       const g = groups.get(name)!
       if (vintage) g.vintages.push(vintage)
-      // keep the id + rating of the entry with the most ratings (proxy: highest rating)
+      // Accumulate ratings count across vintages; track best-rated vintage id
+      g.ratingCount += ratingCount
       if (rating > g.rating) { g.rating = rating; g.id = parseInt(m[1]) }
     })
 
-    // Sort groups by relevance then original position, take top 10 unique wines.
-    // 10 gives the frontend enough headroom to dedup against catalogue results
-    // and still surface niche wines (e.g. Gibson The Dirtman) that Vivino ranks
-    // at position 8-10 for a broad query like "gibson".
+    // Sort: relevance first, then total ratings count (more reviews = better known wine),
+    // then original Vivino position. This surfaces e.g. "Gibson The Dirtman" above
+    // niche Gibson wines when querying "gibson", because The Dirtman has many more reviews.
     const results: VivinoSuggestion[] = [...groups.entries()]
-      .sort(([, a], [, b]) => b.rel - a.rel || a.pos - b.pos)
-      .slice(0, 10)
+      .sort(([, a], [, b]) =>
+        b.rel - a.rel ||
+        b.ratingCount - a.ratingCount ||
+        a.pos - b.pos
+      )
+      .slice(0, 8)
       .map(([name, g]) => ({
         id:       g.id,
         title:    name,

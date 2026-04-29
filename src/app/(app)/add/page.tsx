@@ -306,8 +306,10 @@ export default function AddWinePage() {
           {showDrop && query.length >= 2 && (catSearching || vivSearching || suggestions.length > 0 || vivinoSugs.length > 0) && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setShowDrop(false)} />
+              {/* Outer div clips rounded corners; inner div scrolls so items aren't cut off */}
               <div className="absolute left-0 right-0 top-full mt-1 z-20 rounded-xl overflow-hidden shadow-lg"
-                   style={{ background: '#f5ede6', border: '1px solid #d4b8aa' }}>
+                   style={{ border: '1px solid #d4b8aa' }}>
+                <div className="overflow-y-auto" style={{ maxHeight: '55vh', background: '#f5ede6' }}>
 
                 {/* Catalogue results appear first (fast) */}
                 {suggestions.map(w => (
@@ -367,6 +369,7 @@ export default function AddWinePage() {
                     <p className="text-xs shrink-0" style={{ color: '#a07060' }}>fill details below</p>
                   )}
                 </button>
+                </div>{/* end scroll container */}
               </div>
             </>
           )}
