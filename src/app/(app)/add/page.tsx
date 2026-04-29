@@ -93,7 +93,7 @@ export default function AddWinePage() {
       const q = encodeURIComponent(query)
 
       // ── Catalogue (fast) ──────────────────────────────────────
-      fetch(`/api/wine-search?q=${q}&limit=6`)
+      fetch(`/api/wine-search?q=${q}&limit=8`)
         .then(r => r.json())
         .then(data => {
           const results: CatalogueWine[] = data.results ?? []

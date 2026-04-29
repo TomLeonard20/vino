@@ -90,10 +90,13 @@ export async function GET(req: NextRequest) {
       if (rating > g.rating) { g.rating = rating; g.id = parseInt(m[1]) }
     })
 
-    // Sort groups by relevance then original position, take top 6 unique wines
+    // Sort groups by relevance then original position, take top 10 unique wines.
+    // 10 gives the frontend enough headroom to dedup against catalogue results
+    // and still surface niche wines (e.g. Gibson The Dirtman) that Vivino ranks
+    // at position 8-10 for a broad query like "gibson".
     const results: VivinoSuggestion[] = [...groups.entries()]
       .sort(([, a], [, b]) => b.rel - a.rel || a.pos - b.pos)
-      .slice(0, 6)
+      .slice(0, 10)
       .map(([name, g]) => ({
         id:       g.id,
         title:    name,

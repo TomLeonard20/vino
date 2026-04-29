@@ -41,9 +41,10 @@ body {
 
 /* ── Prevent iOS auto-zoom on input focus ────────────────── */
 /* iOS Safari zooms in whenever an input's font-size is < 16px.
-   Setting a 16px minimum here stops that without disabling user zoom. */
+   !important is required: Tailwind utility classes (text-sm = 14px) have
+   higher specificity than an element selector and would otherwise win. */
 input, select, textarea {
-  font-size: 16px;
+  font-size: 16px !important;
 }
 
 /* ── Tap press feedback (iOS) ────────────────────────────── */
