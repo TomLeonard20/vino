@@ -25,6 +25,26 @@ function stripAccents(s: string): string {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 }
 
+// Common English stop words — PostgreSQL's English tsvector/tsquery strips these,
+// so including them in a to_tsquery() call causes parse errors.
+const STOP_WORDS = new Set([
+  'the','a','an','of','in','at','to','for','is','are','by','with','from',
+  'and','or','de','du','le','la','les','von','van','del','di','da',
+])
+
+/**
+ * Build a prefix-match tsquery string (for use with to_tsquery, NOT websearch_to_tsquery).
+ * Filters stop words so they don't cause parse errors.
+ * Returns null when the query collapses to nothing (all stop words).
+ */
+function buildTsQuery(raw: string): string | null {
+  const terms = raw
+    .split(/\s+/)
+    .filter(w => w.length > 1 && !STOP_WORDS.has(w.toLowerCase()))
+    .map(w => `${w}:*`)
+  return terms.length > 0 ? terms.join(' & ') : null
+}
+
 export async function GET(req: NextRequest) {
   const q        = req.nextUrl.searchParams.get('q')?.trim()
   const variety  = req.nextUrl.searchParams.get('variety')?.trim()
@@ -48,19 +68,34 @@ export async function GET(req: NextRequest) {
     // "Moët" matches "Moet" in the catalogue (and vice versa).
     const qNorm = stripAccents(q)
 
-    const buildTsQuery = (raw: string) =>
-      raw.split(/\s+/).filter(w => w.length > 1).map(w => `${w}:*`).join(' & ')
+    const tsQuery = buildTsQuery(qNorm)
 
-    const { data: fts } = await supabase
-      .from('wine_catalogue')
-      .select('id,title,winery,variety,country,province,region,vintage,points,price_usd,description')
-      .textSearch('search_vector', buildTsQuery(qNorm), { type: 'websearch' })
-      .order('points', { ascending: false, nullsFirst: false })
-      .limit(limit)
+    if (tsQuery) {
+      // Supabase-JS's .textSearch() doesn't URL-encode the '&' operator in tsquery strings,
+      // causing the filter to split at '&' and silently return 0 results.
+      // We bypass it with a direct fetch so URLSearchParams properly encodes '&' → '%26'.
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      const params = new URLSearchParams({
+        select: 'id,title,winery,variety,country,province,region,vintage,points,price_usd,description',
+        search_vector: `fts(english).${tsQuery}`,
+        order: 'points.desc.nullslast',
+        limit: String(limit),
+      })
+      const ftsRes = await fetch(`${supabaseUrl}/rest/v1/wine_catalogue?${params}`, {
+        headers: {
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+        },
+      })
+      if (ftsRes.ok) {
+        const fts: CatalogueWine[] = await ftsRes.json()
+        if (Array.isArray(fts) && fts.length > 0) data = fts
+      }
+    }
 
-    if (fts && fts.length > 0) {
-      data = fts as CatalogueWine[]
-    } else {
+    if (!data) {
       // Fallback 1: ILIKE on title + winery using both accented and stripped form
       const ilikeQ = qNorm !== q ? qNorm : q
       const { data: ilike } = await supabase
